@@ -14,7 +14,9 @@ import serial
 import time
 import traceback
 import uuid
-from gtfu import Area, ShapePoint, Util
+from area import Area
+from shapepoint import ShapePoint
+import util
 import util
 import rcanvas
 import socket
@@ -295,18 +297,18 @@ def handleCommand(args):
         canvas.setColor(util.MAP_POINT);
 
         for p in points:
-            x, y = Util.lat_long_to_x_y(l, l, mapArea, p)
+            x, y = util.lat_long_to_x_y(l, l, mapArea, p)
             canvas.drawCircle(offset + x, offset + y, 8, True)
 
         canvas.setColor(util.MAP_POINT_MISSED);
 
         for p in missed_points:
-            x, y = Util.lat_long_to_x_y(l, l, mapArea, p)
+            x, y = util.lat_long_to_x_y(l, l, mapArea, p)
             canvas.drawCircle(offset + x, offset + y, 8, True)
 
         if len(current_points) > 0:
             p = current_points[-1]
-            x, y = Util.lat_long_to_x_y(l, l, mapArea, p)
+            x, y = util.lat_long_to_x_y(l, l, mapArea, p)
             canvas.setColor(util.LIGHT);
             canvas.drawCircle(offset + x, offset + y, 30, False)
 
@@ -345,7 +347,7 @@ def handleCommand(args):
             canvas.drawCircle(xoff + i, int(y + yoff + hh * .5 + acc_buf[i][2] * yscale), 2, True)
         y += ystep
 
-        str = Util.get_display_distance(mapArea.get_width_in_feet())
+        str = util.get_display_distance(mapArea.get_width_in_feet())
         canvas.drawLabel('Scale:', xl, y + rcanvas.center_text_vertically(ystep))
         canvas.drawTextField(str, xr, y + yoff, screenWidth - xoff - xr, hh)
         y += ystep
