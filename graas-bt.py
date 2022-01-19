@@ -25,10 +25,10 @@ from rcanvas import RCanvas
 from led import set_led_pattern, start_led
 from acc import start_acc, acc_snapshot
 
+APP_VERSION = 'graas 0.1 (gulper)'
 MAX_POINTS = 2500
 startseconds = int(util.get_current_time_millis() / 1000)
 hostname = None
-ipaddr = None
 lock = threading.Lock()
 screenWidth = -1
 screenHeight = -1
@@ -60,7 +60,7 @@ def start_waveshare():
     GPIO.output(6, GPIO.HIGH)
 
 def get_agent_string():
-    return f'raspberry {hostname} {ipaddr}'
+    return f'raspberry {hostname} {APP_VERSION}'
 
 #def dms_to_decimals(deg, min, sec):
 #    return deg + util.sign(deg) * (min / 60) + util.sign(deg) * (sec / 3600)
@@ -403,17 +403,6 @@ def main(config_file, network_gps):
     global hostname
     hostname = socket.gethostname()
     util.debug(f'- hostname: {hostname}')
-
-    """
-    global ipaddr
-    try:
-        r = get('https://api.ipify.org', timeout = 10)
-        ipaddr = r.text
-    except requests.exceptions.ConnectTimeout:
-        util.debug('* couldn\'t get ipaddr')
-        ipaddr = 'unknown'
-    util.debug(f'- ipaddr: {ipaddr}')
-    """
 
     set_led_pattern([0.3, 0.3, 0.3, 2.1])
     os.system('sudo bluetoothctl power on')
