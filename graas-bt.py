@@ -428,9 +428,15 @@ def main(config_file, network_gps):
     canvas = RCanvas(rcanvas.COMM_BT, handleCommand, handleButton)
 
     util.debug('waiting for network...')
-    NETWORK_SLEEP = 120
-    for i in range(NETWORK_SLEEP):
-        util.debug(f'{NETWORK_SLEEP - i}')
+
+    network_sleep = os.getenv('NETWORK_SLEEP')
+    if network_sleep is None:
+        network_sleep = 120
+    else:
+        network_sleep = int(network_sleep)
+
+    for i in range(network_sleep):
+        util.debug(f'{network_sleep - i}')
         time.sleep(1)
 
     set_led_pattern([0.3, 0.3, 0.3, 0.3, 0.3, 1.5])
