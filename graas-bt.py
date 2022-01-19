@@ -424,9 +424,12 @@ def main(config_file, network_gps):
     else:
         network_sleep = int(network_sleep)
 
-    for i in range(network_sleep):
-        util.debug(f'{network_sleep - i}')
-        time.sleep(1)
+    try:
+        for i in range(network_sleep):
+            util.debug(f'{network_sleep - i}')
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
 
     set_led_pattern([0.3, 0.3, 0.3, 0.3, 0.3, 1.5])
     req = request.Request('http://www.google.com')
