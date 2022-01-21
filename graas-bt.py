@@ -27,6 +27,7 @@ from acc import start_acc, acc_snapshot
 
 APP_VERSION = 'graas 0.1 (gulper)'
 MAX_POINTS = 2500
+INVALID_GPS = 9999
 startseconds = int(util.get_current_time_millis() / 1000)
 hostname = None
 lock = threading.Lock()
@@ -487,8 +488,18 @@ def main(config_file, network_gps):
             else:
                 data = read_gps_data(ser)
             if data == None:
-                util.debug('gps not ready...')
-            else:
+                util.error('gps not ready...')
+
+                data = {
+                    'lat': INVALID_GPS,
+                    'lon': INVALID_GPS,
+                    'speed': -1,
+                    'heading': -1,
+                    'accuracy': -1,
+                    'timestamp': 0
+                }
+
+            if data['lat'] != INVALID_GPS:
                 seconds = util.get_seconds_since_midnight()
                 lat = data['lat']
                 lon = data['lon']
@@ -497,7 +508,8 @@ def main(config_file, network_gps):
                 util.debug(f'current location: lat={lat} long={lon} seconds={seconds} grid_index={grid_index}')
                 trip_id = str(inf.get_trip_id(lat, lon, seconds))
                 util.debug(f'- trip_id: {trip_id}')
-                send_gps_data(data, trip_id, sk)
+
+            send_gps_data(data, trip_id, sk)
         except KeyboardInterrupt:
             send_at(ser, 'AT+CGPS=0','OK',1)
             if ser != None:
