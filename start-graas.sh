@@ -12,5 +12,9 @@ sudo chgrp bluetooth /var/run/sdp
 source /home/pi/venv/graas/bin/activate
 . /etc/environment
 cd $GRASS_ROOT
+if [ "$GRASS_IS_DEPLOYED" == "true" ]; then
+    git checkout $GRASS_BRANCH
+    git pull
+fi
 python graas-bt.py $GRASS_NETWORK_ARG -c /home/pi/doc/graas.cfg
 
