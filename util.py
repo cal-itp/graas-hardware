@@ -147,7 +147,7 @@ def debug(s):
         debug_callback(s)
 
 def error(s):
-    print(f'* {s}')
+    print(f'*** {s}')
     sys.stdout.flush()
 
 def to_decimal(v, dir):
