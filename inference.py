@@ -97,7 +97,14 @@ class TripInference:
 
                 trip_name = route_map[route_id]['name'] + ' @ ' + util.seconds_to_ampm_hhmm(stop_times[0]['arrival_time'])
                 util.debug(f'-- trip_name: {trip_name}')
-                segment_length = 2 * FEET_PER_MILE ### TODO derive segment length from trip length
+                shape_length = self.shape_length_map[shape_id]
+
+                if shape_length is None:
+                    segment_length = 2 * FEET_PER_MILE
+                else:
+                    segment_length = int(shape_length / 30)
+
+                util.debug(f'-- segment_length: {segment_length}')
                 timer = Timer('segments')
                 self.make_trip_segments(trip_id, trip_name, way_points, segment_length)
                 util.debug(timer)
@@ -354,6 +361,9 @@ class TripInference:
         area = Area()
         index_list = []
 
+        skirt_size = max(int(max_segment_length / 10), 500)
+        print(f'- skirt_size: {skirt_size}') ### TODO set area skirt based on segment length instead of an absolute number
+
         while index < len(way_points):
             lp = way_points[last_index]
             p = way_points[index]
@@ -368,7 +378,7 @@ class TripInference:
             segment_length += distance
 
             if segment_length >= max_segment_length or index == len(way_points) - 1:
-                area.extend(1000) ### TODO set area skirt based on segment length instead of an absolute number
+                area.extend(skirt_size)
 
                 segment = Segment(
                     trip_id,
