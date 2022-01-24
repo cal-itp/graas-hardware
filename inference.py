@@ -368,7 +368,7 @@ class TripInference:
             segment_length += distance
 
             if segment_length >= max_segment_length or index == len(way_points) - 1:
-                area.extend(1000)
+                area.extend(1000) ### TODO set area skirt based on segment length instead of an absolute number
 
                 segment = Segment(
                     trip_id,
