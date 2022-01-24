@@ -46,6 +46,8 @@ class TripInference:
         self.preload_stop_times()
         self.preload_shapes()
 
+        self.compute_shape_lengths()
+
         with open(path + '/trips.txt', 'r') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
@@ -125,6 +127,26 @@ class TripInference:
                 lat = float(r['shape_pt_lat'])
                 lon = float(r['shape_pt_lon'])
                 area.update(lat, lon)
+
+    def compute_shape_lengths(self):
+        self.shape_length_map = {}
+
+        for shape_id in self.shape_map:
+            #util.debug(f'-- shape_id: {shape_id}')
+            point_list = self.shape_map[shape_id]
+            #util.debug(f'-- point_list: {point_list}')
+            length = 0
+
+            for i in range(len(point_list) - 1):
+                p1 = point_list[i];
+                #util.debug(f'--- p1: {p1}')
+                p2 = point_list[i + 1]
+                #util.debug(f'--- p2: {p2}')
+
+                length += util.haversine_distance(p1['lat'], p1['long'], p2['lat'], p2['long'])
+
+            self.shape_length_map[shape_id] = length
+            util.debug(f'++ length for shape {shape_id}: {util.get_display_distance(length)}')
 
     def preload_shapes(self):
         self.shape_map = {}

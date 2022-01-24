@@ -100,7 +100,7 @@ def get_display_distance(feet):
         v = feet / FEET_PER_MILE
         return f'{v:.1f} MILES'
     else:
-        return f'{int(feet / Util.FEET_PER_MILE)} MILES'
+        return f'{int(feet / FEET_PER_MILE)} MILES'
 
 # converts coordinates from lat/long to x/y given
 # display width and height, an area instance
