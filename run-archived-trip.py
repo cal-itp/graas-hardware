@@ -4,6 +4,8 @@ import time
 import util
 from area import Area
 from shapepoint import ShapePoint
+import re
+from datetime import datetime
 
 def main(data_file, cache_folder, static_gtfs_url):
     util.debug(f'main()')
@@ -11,7 +13,7 @@ def main(data_file, cache_folder, static_gtfs_url):
     util.debug(f'- cache_folder: {cache_folder}')
     util.debug(f'- static_gtfs_url: {static_gtfs_url}')
 
-    inf = inference.TripInference(cache_folder, static_gtfs_url, 15)
+    inf = inference.TripInference(cache_folder, static_gtfs_url, 15, get_dow(data_file))
     util.debug(f'- inference.TripInference.VERSION: {inference.TripInference.VERSION}')
 
     with open(data_file, 'r') as f:
@@ -28,6 +30,19 @@ def main(data_file, cache_folder, static_gtfs_url):
             util.debug(f'current location: lat={lat} long={lon} seconds={day_seconds} grid_index={grid_index}')
             trip_id = inf.get_trip_id(lat, lon, day_seconds)
             print(f'- trip_id: {trip_id}')
+
+# assumes that filename contains a string of format yyyy-mm-dd
+# returns day of week: 0-6 for Monday through Sunday if date string present, -1 otherwise
+def get_dow(filename):
+    pattern = '.*([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]).*'
+    m = re.search(pattern, filename)
+
+    if m:
+        yyyymmdd = m.group(1)
+        date = datetime.strptime(yyyymmdd, '%Y-%m-%d')
+        return date.weekday()
+    else:
+        return -1
 
 def usage():
     print(f'usage: {sys.argv[0]} -d|--data-file <data-file> -c|--cache-foler <cache-folder> -u|--static-gtfs-url <static-gtfs-url>')

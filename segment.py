@@ -18,7 +18,7 @@ MAX_TIME_DISTANCE = 900 # seconds
 class Segment:
     id_base = 0
 
-    def __init__(self, trip_id, trip_name, bounding_box, start_time, end_time, min_file_offset, max_file_offset):
+    def __init__(self, trip_id, trip_name, trip_start_seconds, bounding_box, start_time, end_time, min_file_offset, max_file_offset):
         self.id = Segment.id_base
         Segment.id_base += 1
 
@@ -26,6 +26,8 @@ class Segment:
 
         self.trip_id = trip_id
         self.trip_name = trip_name
+        self.trip_start_seconds = trip_start_seconds
+        #print(f'- trip_start_seconds: {trip_start_seconds}')
         self.bounding_box = bounding_box
         self.start_time = start_time
         self.end_time = end_time
@@ -40,7 +42,7 @@ class Segment:
         #if random.random() < .5:
         #    util.debug(f'segment update: id={self.id} trip-name={util.to_b64(self.trip_name)} score={0.0000001}')
 
-        if seconds < self.start_time - MAX_TIME_DISTANCE or seconds > self.end_time + MAX_TIME_DISTANCE:
+        if seconds < self.trip_start_seconds or seconds < self.start_time - MAX_TIME_DISTANCE or seconds > self.end_time + MAX_TIME_DISTANCE:
             return -1
 
         list = []
@@ -55,10 +57,10 @@ class Segment:
                 line = f.readline().strip()
                 r = csvline.parse(line)
 
-                lat = float(r['shape_pt_lat'])
-                lon = float(r['shape_pt_lon'])
+                llat = float(r['shape_pt_lat'])
+                llon = float(r['shape_pt_lon'])
 
-                list.append({'lat': lat, 'lon': lon})
+                list.append({'lat': llat, 'lon': llon})
 
                 if f.tell() > self.max_file_offset:
                     break
@@ -66,6 +68,8 @@ class Segment:
         delta_time = self.end_time - self.start_time
         min_distance = 1000000
         min_index = -1
+        closestLat = 0
+        closestLon = 0
 
         for i in range(len(list)):
             distance = util.haversine_distance(list[i]['lat'], list[i]['lon'], lat, lon)
@@ -73,6 +77,8 @@ class Segment:
             if distance < min_distance:
                 min_distance = distance
                 min_index = i
+                closestLat = list[i]['lat']
+                closestLon = list[i]['lon']
 
             fraction = i / len(list)
             time = int(self.start_time + fraction * delta_time)
@@ -89,7 +95,7 @@ class Segment:
         location_score = .5 * (MAX_LOCATION_DISTANCE - min_distance) / MAX_LOCATION_DISTANCE
         time_score = .5 * (MAX_TIME_DISTANCE - time_distance) / MAX_TIME_DISTANCE
 
-        util.debug(f'segment update: id={self.id} trip-name={util.to_b64(self.trip_name)} score={location_score + time_score}')
+        util.debug(f'segment update: id={self.id} trip-name={util.to_b64(self.trip_name)} score={location_score + time_score} closest-lat={closestLat} closest-lon={closestLon}')
         return location_score + time_score
 
     def get_trip_id(self):

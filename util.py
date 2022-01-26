@@ -150,6 +150,10 @@ def error(s):
     print(f'*** {s}')
     sys.stdout.flush()
 
+def early_exit():
+    error('early exit')
+    exit(1)
+
 def to_decimal(v, dir):
     #debug('to_decimal()')
     #debug(f'- v: {v}')
