@@ -22,7 +22,7 @@ class Segment:
         self.id = Segment.id_base
         Segment.id_base += 1
 
-        util.debug(f'segment: id={self.id} top_left={bounding_box.top_left} bottom_right={bounding_box.bottom_right} start_time={util.seconds_to_hhmmss(start_time)} end_time={util.seconds_to_hhmmss(end_time)}')
+        util.debug(f'segment: id={self.id} trip_id={trip_id} top_left={bounding_box.top_left} bottom_right={bounding_box.bottom_right} start_time={util.seconds_to_hhmmss(start_time)} end_time={util.seconds_to_hhmmss(end_time)}')
 
         self.trip_id = trip_id
         self.trip_name = trip_name
