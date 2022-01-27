@@ -418,6 +418,10 @@ class TripInference:
                 index += 1
                 last_index = index
                 segment_start = index
+
+                p = way_points[max(segment_start - 1, 0)]
+                area.update(p['lat'], p['long'])
+
                 continue
 
             last_index = index
