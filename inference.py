@@ -1,4 +1,4 @@
-#from csvline import CSVLine
+import copy
 import csv
 import datetime
 import time
@@ -188,7 +188,13 @@ class TripInference:
                     plist = []
                     self.shape_map[shape_id] = plist
 
-                plist.append({'lat': lat, 'long': lon, 'file_offset': file_offset})
+                entry = {'lat': lat, 'long': lon, 'file_offset': file_offset}
+                sdt = r.get('shape_dist_traveled', None)
+
+                if sdt is not None and len(sdt) > 0:
+                    entry['traveled'] = float(sdt)
+
+                plist.append(entry)
 
     def get_shape_points(self, shape_id):
         return self.shape_map.get(shape_id, None)
@@ -273,7 +279,15 @@ class TripInference:
                     slist = []
                     self.stop_time_map[trip_id] = slist
 
-                slist.append({'arrival_time': util.hhmmss_to_seconds(arrival_time), 'stop_id': stop_id})
+                entry = {'arrival_time': util.hhmmss_to_seconds(arrival_time), 'stop_id': stop_id}
+                sdt = r.get('shape_dist_traveled', None)
+
+                if sdt is not None and len(sdt) > 0:
+                    entry['traveled'] = float(sdt)
+
+                #print(f'- entry: {entry}')
+
+                slist.append(entry)
 
     def get_stop_times(self, trip_id):
         return self.stop_time_map.get(trip_id, None)
@@ -282,6 +296,124 @@ class TripInference:
             wp = way_points[wi]
             sp = stops[stop_times[si]['stop_id']]
             return util.haversine_distance(wp['lat'], wp['long'], sp['lat'], sp['long'])
+
+
+    """
+    For simpler trips `shape_dist_traveled` is optional. If the attribute is missing, we can take the following approach:
+    - for each stop, assign a fraction of arrival time at that stop to total trip time -> fractions list
+    - for i in len(fractions)
+    -   compute index into shape list as int(fractions[i] * len(way_points) -> anchor_list
+    - explore neighboring points in way_points for each match_list entry, going up to half the points until previous or next anchor point
+    - adjust anchor points if closer match found
+    - repeat until stable (current anchor list equals pevious anchor list) of max tries reached
+    """
+    def create_anchor_list_iteratively(self, shape_id, way_points, stop_times, stops):
+        total_seconds = float(stop_times[-1]['arrival_time'])
+        anchor_list = []
+
+        for i in range(len(stop_times)):
+            seconds = stop_times[i]['arrival_time']
+            frac = seconds / total_seconds
+            j = int(frac * len(way_points))
+            anchor_list.append({'index': j, 'time': stop_times[i]['arrival_time']})
+
+        for i in range(5):
+            last_anchor_list = copy.copy(anchor_list)
+
+            # explore neighbors in anchor_list, potentially changing index fields
+            for j in range(len(last_anchor_list)):
+                c = last_anchor_list[j]
+
+                p = c
+                if j > 0:
+                    p = last_anchor_list[j - 1]
+
+                n = c
+                if n < len(last_anchor_list) - 1:
+                    n = last_anchor_list[j + 1]
+
+                p1 = stops[stop_times[j]['stop_id']]
+                p2 = way_points[c]
+                min_diff = util.haversine_distance(p1['lat'], p1['lon'], p2['lat'], p2['lon'])
+                min_index = j
+
+                kf = p + (c - p) / 2
+                kt = c + (n - j) / 2
+
+                for k in range(kf, kt):
+                    p2 = way_points[last_anchor_list[k]]
+                    diff = util.haversine_distance(p1['lat'], p1['lon'], p2['lat'], p2['lon'])
+
+                    if diff < min_diff:
+                        min_diff = diff
+                        min_index = k
+
+                anchor_list[j]['index'] = min_index
+
+            stable = True
+
+            for j in range(len(anchor_list)):
+                i1 = anchor_list[j]['index']
+                i2 = last_anchor_list[j]['index']
+
+                if i1 != i2:
+                    stable = False
+                    break
+
+            if stable:
+                break
+        return anchor_list
+
+    """
+    anchor_list establishes a relationship between the list of stops for a trip and that trip's way points as described in shapes.txt.
+    The list has one entry per stop. Each entry has an index into way_points to map to the closest shape point and the time when
+    a vehicle is scheduled to arrive at that point (as given in stop_times.txt). anchor_list is an intermediate point in assigning
+    timestamps to each point of the trip shape
+
+    Complex trips with self-intersecting or self-overlapping segments are supposed to have `shape_dist_traveled` attributes for their
+    shape.txt and stop_times.txt entries. This allows for straight-forward finding of shape points close to stops.
+    """
+    def create_anchor_list(self, shape_id, way_points, stop_times, stops):
+        #print(f' - len(way_points): {len(way_points)}')
+        #print(f' - len(stop_times): {len(stop_times)}')
+        #print(f' - len(stops): {len(stops)}')
+
+        annotated = True
+
+        for i in range(len(stop_times)):
+            if not stop_times[i].get('traveled', False):
+                annotated = False
+                break;
+
+        if annotated:
+            for i in range(len(way_points)):
+                if not way_points[i].get('traveled', False):
+                    annotated = False
+                    break;
+
+        if not annoted:
+            return self.create_anchor_list_iteratively(shape_id, way_points, stop_times, stops)
+
+        anchor_list = []
+
+        for i in range(len(stop_times)):
+            traveled = stop_times[i]['traveled']
+            time = stop_times[i]['arrival_time']
+
+            min_difference = float('inf')
+            min_index = -1
+
+            for j in range(len(way_points)):
+                t = way_points[j]['traveled']
+                diff = math.abs(traveled - t)
+
+                if diff < min_difference:
+                    min_difference = diff
+                    min_index = j
+
+            anchor_list.append({'index': min_index, 'time': time})
+
+        return anchor_list
 
     """
     This is a naive, brute force approach that may well fail for self-intersecting or

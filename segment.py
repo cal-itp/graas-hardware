@@ -71,6 +71,20 @@ class Segment:
         closestLat = 0
         closestLon = 0
 
+        """
+        ### TODO the approach below only works reliably if shape points are spaced close
+        together, i.e. a few hundred feet apart. If points are far apart, for example on
+        a long straight road segment where there is one point for the beginning of the
+        segment and one for the end, then lat/long vehicle updates can be far apart from
+        either point, but can still be matching the route closely.
+
+        A better approach for widely spaced points is to create a vector between those
+        points (A) and then take the length of the orthogonal vector (B) between A
+        and the update location.
+
+        Iterate over shape point pairs and choose length of shortest orthogonal vector as
+        min distance. If no such orthogonal vector exists, fall back on naive approach
+        """
         for i in range(len(list)):
             distance = util.haversine_distance(list[i]['lat'], list[i]['lon'], lat, lon)
 
