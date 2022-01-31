@@ -1,6 +1,7 @@
 import copy
 import csv
 import datetime
+import math
 import time
 import util
 from shapepoint import ShapePoint
@@ -307,48 +308,68 @@ class TripInference:
     - adjust anchor points if closer match found
     - repeat until stable (current anchor list equals pevious anchor list) of max tries reached
     """
-    def create_anchor_list_iteratively(self, shape_id, way_points, stop_times, stops):
-        total_seconds = float(stop_times[-1]['arrival_time'])
+    def create_anchor_list_iteratively(self, way_points, stop_times, stops):
+        start_seconds = stop_times[0]['arrival_time']
+        stop_seconds = stop_times[-1]['arrival_time']
+        total_seconds = float(stop_seconds - start_seconds)
+        print(f'- total_seconds: {total_seconds}')
         anchor_list = []
 
         for i in range(len(stop_times)):
-            seconds = stop_times[i]['arrival_time']
+            print(f'-- i: {i}')
+            seconds = stop_times[i]['arrival_time'] - start_seconds
+            print(f'-- seconds: {seconds}')
             frac = seconds / total_seconds
-            j = int(frac * len(way_points))
+            print(f'-- frac: {frac}')
+            j = int(frac * (len(way_points) - 1))
+            print(f'-- j: {j}')
             anchor_list.append({'index': j, 'time': stop_times[i]['arrival_time']})
 
-        for i in range(5):
-            last_anchor_list = copy.copy(anchor_list)
+        for i in range(20):
+            last_anchor_list = copy.deepcopy(anchor_list)
+            print(f'-- last_anchor_list: {last_anchor_list}')
 
             # explore neighbors in anchor_list, potentially changing index fields
             for j in range(len(last_anchor_list)):
+                print(f'-- j: {j}')
                 c = last_anchor_list[j]
+                print(f'-- c: {c}')
 
                 p = c
                 if j > 0:
                     p = last_anchor_list[j - 1]
 
                 n = c
-                if n < len(last_anchor_list) - 1:
+                if j < len(last_anchor_list) - 1:
                     n = last_anchor_list[j + 1]
 
                 p1 = stops[stop_times[j]['stop_id']]
-                p2 = way_points[c]
-                min_diff = util.haversine_distance(p1['lat'], p1['lon'], p2['lat'], p2['lon'])
-                min_index = j
+                p2 = way_points[c['index']]
+                min_diff = util.haversine_distance(p1['lat'], p1['long'], p2['lat'], p2['long'])
+                min_index = c['index']
+                print(f'-- min_index: {min_index}')
 
-                kf = p + (c - p) / 2
-                kt = c + (n - j) / 2
+                print(f'-- c["index"]: {c["index"]}')
+                print(f'-- p["index"]: {p["index"]}')
+                print(f'-- n["index"]: {n["index"]}')
+
+                kf = int(p['index'] + math.ceil((c['index'] - p['index']) / 2))
+                kt = int(c['index'] + (n['index'] - c['index']) / 2)
+
+                print(f'-- kf: {kf}, kt: {kt}')
 
                 for k in range(kf, kt):
-                    p2 = way_points[last_anchor_list[k]]
-                    diff = util.haversine_distance(p1['lat'], p1['lon'], p2['lat'], p2['lon'])
+                    p2 = way_points[k]
+                    diff = util.haversine_distance(p1['lat'], p1['long'], p2['lat'], p2['long'])
 
                     if diff < min_diff:
                         min_diff = diff
                         min_index = k
 
+                print(f'++ min_index: {min_index}')
                 anchor_list[j]['index'] = min_index
+
+            print(f'-- anchor_list     : {anchor_list}')
 
             stable = True
 
@@ -357,11 +378,15 @@ class TripInference:
                 i2 = last_anchor_list[j]['index']
 
                 if i1 != i2:
+                    print(f'* {i1} != {i2}')
                     stable = False
                     break
 
             if stable:
                 break
+
+        print(f'++ anchor_list     : {anchor_list}')
+
         return anchor_list
 
     """
@@ -373,7 +398,7 @@ class TripInference:
     Complex trips with self-intersecting or self-overlapping segments are supposed to have `shape_dist_traveled` attributes for their
     shape.txt and stop_times.txt entries. This allows for straight-forward finding of shape points close to stops.
     """
-    def create_anchor_list(self, shape_id, way_points, stop_times, stops):
+    def create_anchor_list(self, way_points, stop_times, stops):
         #print(f' - len(way_points): {len(way_points)}')
         #print(f' - len(stop_times): {len(stop_times)}')
         #print(f' - len(stops): {len(stops)}')
@@ -391,8 +416,8 @@ class TripInference:
                     annotated = False
                     break;
 
-        if not annoted:
-            return self.create_anchor_list_iteratively(shape_id, way_points, stop_times, stops)
+        if not annotated:
+            return self.create_anchor_list_iteratively(way_points, stop_times, stops)
 
         anchor_list = []
 
@@ -425,14 +450,12 @@ class TripInference:
     - repeat until stable
     """
     def interpolate_way_point_times(self, way_points, stop_times, stops):
-        index_list = []
+        anchor_list = self.create_anchor_list(way_points, stop_times, stops)
         firstStop = True
 
         #print(f'interpolate_way_point_times()')
         #util.debug(f'- len(way_points): {len(way_points)}')
         #util.debug(f'- len(stop_times): {len(stop_times)}')
-
-        last_index = 0
 
         for st in stop_times:
             sp = stops[st['stop_id']]
@@ -441,26 +464,12 @@ class TripInference:
                 sp['first_stop'] = True
                 firstStop = False
 
-            min_distance = 1000000
-            min_index = -1
+        util.debug(f'- anchor_list: {anchor_list}')
+        #util.debug(f'- len(anchor_list): {len(anchor_list)}')
 
-            for i in range(last_index, len(way_points)):
-                wp = way_points[i]
-                distance = util.haversine_distance(wp['lat'], wp['long'], sp['lat'], sp['long'])
-
-                if distance < min_distance:
-                    min_distance = distance
-                    min_index = i
-
-            index_list.append({'index': min_index, 'time': st['arrival_time']})
-            last_index = min_index
-
-        util.debug(f'- index_list: {index_list}')
-        #util.debug(f'- len(index_list): {len(index_list)}')
-
-        for i in range(len(index_list) - 1):
-            start = index_list[i]
-            end = index_list[i + 1]
+        for i in range(len(anchor_list) - 1):
+            start = anchor_list[i]
+            end = anchor_list[i + 1]
             tdelta = end['time'] - start['time']
             idelta = end['index'] - start['index']
 
@@ -475,15 +484,15 @@ class TripInference:
 
         #util.debug('--------------------------')
 
-        index = index_list[0]['index']
-        time = index_list[0]['time']
+        index = anchor_list[0]['index']
+        time = anchor_list[0]['time']
 
         while index >= 0:
             index -= 1
             way_points[index]['time'] = time
 
-        index = index_list[-1]['index']
-        time = index_list[-1]['time']
+        index = anchor_list[-1]['index']
+        time = anchor_list[-1]['time']
 
         while index < len(way_points):
             way_points[index]['time'] = time
