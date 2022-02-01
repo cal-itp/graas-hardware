@@ -43,6 +43,9 @@ def to_b64(s):
 def from_b64(s):
     return b64decode(s).decode('utf-8')
 
+def signum(x):
+    return math.copysign(1, x)
+
 def get_current_time_millis():
     return int(round(time.time() * 1000))
 
@@ -126,6 +129,12 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     return EARTH_RADIUS_IN_FEET * c
+
+def distance(x0, y0, x1, y1):
+    xd = x1 - x0
+    yd = y1 - y0
+
+    return math.sqrt(xd * xd + yd * yd)
 
 def get_distance_string(feet):
     if (feet < FEET_PER_MILE):

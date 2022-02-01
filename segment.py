@@ -1,6 +1,7 @@
 from area import Area
 import csv
 import random
+import geo_util
 import util
 
 MAX_LOCATION_DISTANCE = 1000 # feet
@@ -85,8 +86,11 @@ class Segment:
         Iterate over shape point pairs and choose length of shortest orthogonal vector as
         min distance. If no such orthogonal vector exists, fall back on naive approach
         """
-        for i in range(len(list)):
-            distance = util.haversine_distance(list[i]['lat'], list[i]['lon'], lat, lon)
+        for i in range(len(list) - 1):
+            sp1 = list[i]
+            sp2 = list[i + 1]
+
+            distance = geo_util.get_min_distance(sp1['lat'], sp1['lon'], sp2['lat'], sp2['lon'], lat, lon)
 
             if distance < min_distance:
                 min_distance = distance
@@ -97,6 +101,8 @@ class Segment:
             fraction = i / len(list)
             time = int(self.start_time + fraction * delta_time)
             list[i]['time'] = time
+
+        print(f'- min_distance: {min_distance}')
 
         if min_distance > MAX_LOCATION_DISTANCE:
             return -1

@@ -10,7 +10,6 @@ from grid import Grid
 from segment import Segment
 from timer import Timer
 
-FEET_PER_MILE = 5280
 STOP_PROXIMITY = 150
 SCORE_THRESHOLD = 50
 MIN_FLUSH_TIME_DELTA = 30 * 60
@@ -104,7 +103,7 @@ class TripInference:
                 shape_length = self.shape_length_map[shape_id]
 
                 if shape_length is None:
-                    segment_length = 2 * FEET_PER_MILE
+                    segment_length = 2 * util.FEET_PER_MILE
                 else:
                     segment_length = int(shape_length / 30)
 
