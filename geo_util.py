@@ -51,7 +51,7 @@ def get_min_distance(lat0, lon0, lat1, lon1, lat2, lon2):
     latc = (lmax - lmin) / 2
 
     # convert lat/long to cartesian
-    cl = math.cos(latc)
+    cl = math.cos(math.radians(latc))
     x0 = util.EARTH_RADIUS_IN_FEET * lon0 * cl
     y0 = util.EARTH_RADIUS_IN_FEET * lat0
     x1 = util.EARTH_RADIUS_IN_FEET * lon1 * cl
@@ -66,7 +66,7 @@ def get_min_distance(lat0, lon0, lat1, lon1, lat2, lon2):
     # find segment slope and intersect
     if x0 == x1:
         # vertical segment edge case
-        m = util.sign(y1 - y0) * float('inf')
+        m = util.signum(y1 - y0) * float('inf')
     else:
         m = float(y1 - y0) / (x1 - x0)
     b = y0 - m * x0
