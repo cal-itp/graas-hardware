@@ -45,10 +45,20 @@ def get_min_distance(lat0, lon0, lat1, lon1, lat2, lon2):
         lon2 (float): fractional long value of U
     """
 
+    #print(f'++++++++')
+    #print(f'- sp1: ({lat0}, {lon0})')
+    #print(f'- sp2: ({lat1}, {lon1})')
+    #print(f'-   u: ({lat2}, {lon2})')
+
     # find center lat
     lmin = min(lat0, lat1, lat2)
     lmax = max(lat0, lat1, lat2)
-    latc = (lmax - lmin) / 2
+    latc = (lmax + lmin) / 2
+
+    #print(f'--------')
+    #print(f'- lmin: {lmin}')
+    #print(f'- lmax: {lmax}')
+    #print(f'- latc: {latc}')
 
     # convert lat/long to cartesian
     cl = math.cos(math.radians(latc))
@@ -59,9 +69,26 @@ def get_min_distance(lat0, lon0, lat1, lon1, lat2, lon2):
     x2 = util.EARTH_RADIUS_IN_FEET * lon2 * cl
     y2 = util.EARTH_RADIUS_IN_FEET * lat2
 
+    #print(f'--------')
+    #print(f'-  cl: {cl}')
+    #print(f'- sp1: ({x0}, {y0})')
+    #print(f'- sp1: ({x1}, {y1})')
+    #print(f'-   u: ({x2}, {y2})')
+
+    h1 = int(util.haversine_distance(lat0, lon0, lat2, lon2))
+    h2 = int(util.haversine_distance(lat1, lon1, lat2, lon2))
+
+    #print(f'--------')
+    #print(f'- h1: {h1}')
+    #print(f'- h2: {h2}')
+
     # check proximity to segment end points
     d1 = util.distance(x0, y0, x2, y2)
     d2 = util.distance(x1, y1, x2, y2)
+
+    #print(f'--------')
+    #print(f'- d1: {d1}')
+    #print(f'- d2: {d2}')
 
     # find segment slope and intersect
     if x0 == x1:
@@ -88,6 +115,10 @@ def get_min_distance(lat0, lon0, lat1, lon1, lat2, lon2):
     d3 = util.distance(x0, y0, x1, y1) # length of vector(SP1, SP2)
     d4 = util.distance(x0, y0, x, y)   # length of vector(SP1, INTERSECTION_POINT)
     d5 = util.distance(x, y, x2, y2)   # distance of U from INTERSECTION_POINT
+
+    #print(f'- d3: {d3}')
+    #print(f'- d4: {d4}')
+    #print(f'- d5: {d5}')
 
     # if intersection of orthogonal through U lies on S
     if d4 <= d3:

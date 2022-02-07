@@ -4,7 +4,7 @@ import random
 import geo_util
 import util
 
-MAX_LOCATION_DISTANCE = 1000 # feet
+MAX_LOCATION_DISTANCE = 30000 # feet
 MAX_TIME_DISTANCE = 900 # seconds
 
 """
@@ -67,7 +67,7 @@ class Segment:
                     break
 
         delta_time = self.end_time - self.start_time
-        min_distance = 1000000
+        min_distance = 1000000000
         min_index = -1
         closestLat = 0
         closestLon = 0

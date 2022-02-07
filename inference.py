@@ -311,28 +311,28 @@ class TripInference:
         start_seconds = stop_times[0]['arrival_time']
         stop_seconds = stop_times[-1]['arrival_time']
         total_seconds = float(stop_seconds - start_seconds)
-        print(f'- total_seconds: {total_seconds}')
+        #print(f'- total_seconds: {total_seconds}')
         anchor_list = []
 
         for i in range(len(stop_times)):
-            print(f'-- i: {i}')
+            #print(f'-- i: {i}')
             seconds = stop_times[i]['arrival_time'] - start_seconds
-            print(f'-- seconds: {seconds}')
+            #print(f'-- seconds: {seconds}')
             frac = seconds / total_seconds
-            print(f'-- frac: {frac}')
+            #print(f'-- frac: {frac}')
             j = int(frac * (len(way_points) - 1))
-            print(f'-- j: {j}')
+            #print(f'-- j: {j}')
             anchor_list.append({'index': j, 'time': stop_times[i]['arrival_time']})
 
         for i in range(20):
             last_anchor_list = copy.deepcopy(anchor_list)
-            print(f'-- last_anchor_list: {last_anchor_list}')
+            #print(f'-- last_anchor_list: {last_anchor_list}')
 
             # explore neighbors in anchor_list, potentially changing index fields
             for j in range(len(last_anchor_list)):
-                print(f'-- j: {j}')
+                #print(f'-- j: {j}')
                 c = last_anchor_list[j]
-                print(f'-- c: {c}')
+                #print(f'-- c: {c}')
 
                 p = c
                 if j > 0:
@@ -346,16 +346,16 @@ class TripInference:
                 p2 = way_points[c['index']]
                 min_diff = util.haversine_distance(p1['lat'], p1['long'], p2['lat'], p2['long'])
                 min_index = c['index']
-                print(f'-- min_index: {min_index}')
+                #print(f'-- min_index: {min_index}')
 
-                print(f'-- c["index"]: {c["index"]}')
-                print(f'-- p["index"]: {p["index"]}')
-                print(f'-- n["index"]: {n["index"]}')
+                #print(f'-- c["index"]: {c["index"]}')
+                #print(f'-- p["index"]: {p["index"]}')
+                #print(f'-- n["index"]: {n["index"]}')
 
                 kf = int(p['index'] + math.ceil((c['index'] - p['index']) / 2))
                 kt = int(c['index'] + (n['index'] - c['index']) / 2)
 
-                print(f'-- kf: {kf}, kt: {kt}')
+                #print(f'-- kf: {kf}, kt: {kt}')
 
                 for k in range(kf, kt):
                     p2 = way_points[k]
@@ -365,10 +365,10 @@ class TripInference:
                         min_diff = diff
                         min_index = k
 
-                print(f'++ min_index: {min_index}')
+                #print(f'++ min_index: {min_index}')
                 anchor_list[j]['index'] = min_index
 
-            print(f'-- anchor_list     : {anchor_list}')
+            #print(f'-- anchor_list     : {anchor_list}')
 
             stable = True
 
@@ -377,14 +377,14 @@ class TripInference:
                 i2 = last_anchor_list[j]['index']
 
                 if i1 != i2:
-                    print(f'* {i1} != {i2}')
+                    #print(f'* {i1} != {i2}')
                     stable = False
                     break
 
             if stable:
                 break
 
-        print(f'++ anchor_list     : {anchor_list}')
+        #print(f'++ anchor_list     : {anchor_list}')
 
         return anchor_list
 
