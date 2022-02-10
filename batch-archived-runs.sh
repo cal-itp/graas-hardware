@@ -16,4 +16,5 @@ do
   python3 run-archived-trip.py -d $DATA_DIR/$i/updates.txt -c ~/tmp/tuff -u $GTFS_URL > $LOG
   echo "expected: "` head -1 $DATA_DIR/$i/metadata.txt | sed 's/.*: //'`
   grep "^- trip_id:" $LOG | uniq -c
+  exit 1
 done

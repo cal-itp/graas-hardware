@@ -11,7 +11,7 @@ from segment import Segment
 from timer import Timer
 
 STOP_PROXIMITY = 150
-SCORE_THRESHOLD = 50
+SCORE_THRESHOLD = 7
 MIN_FLUSH_TIME_DELTA = 30 * 60
 STOP_CAP = 10
 
@@ -109,7 +109,7 @@ class TripInference:
 
                 #util.debug(f'-- segment_length: {segment_length}')
                 timer = Timer('segments')
-                self.make_trip_segments(trip_id, trip_name, stop_times[0]['arrival_time'], way_points, segment_length)
+                self.make_trip_segments(trip_id, trip_name, stop_times[0], way_points, segment_length)
                 #util.debug(timer)
                 #util.debug(loop_timer)
 
@@ -502,7 +502,7 @@ class TripInference:
             if not 'time' in way_points[i]:
                 util.debug(f'.. {i}')
 
-    def make_trip_segments(self, trip_id, trip_name, trip_start_seconds, way_points, max_segment_length):
+    def make_trip_segments(self, trip_id, trip_name, first_stop, way_points, max_segment_length):
         #print(f'- make_trip_segments()')
         #print(f'- max_segment_length: {max_segment_length}')
         #print(f'- way_points: {way_points}')
@@ -511,6 +511,7 @@ class TripInference:
         index = segment_start
         last_index = index
         segment_length = 0
+        first_segment = True
 
         area = Area()
         index_list = []
@@ -537,10 +538,16 @@ class TripInference:
                 if segment_start == 0 and way_points[segment_start]['time'] == way_points[index]['time']:
                     util.error(f'0 duration first segment for trip {trip_id}')
 
+                stop_id = None
+                if first_segment:
+                    first_segment = False
+                    stop_id = first_stop['stop_id']
+
                 segment = Segment(
                     trip_id,
                     trip_name,
-                    trip_start_seconds,
+                    first_stop['arrival_time'],
+                    stop_id,
                     area,
                     way_points[segment_start]['time'],
                     way_points[index]['time'],
@@ -619,6 +626,11 @@ class TripInference:
 
             if score <= 0:
                 continue
+
+            if segment.stop_id is not None:
+                st = self.stops[segment.stop_id]
+                if util.haversine_distance(lat, lon, st['lat'], st['lon']) < STOP_PROXIMITY:
+                    continue
 
             if score > max_segment_score:
                 max_segment_score = score
