@@ -35,6 +35,7 @@ class Segment:
         self.end_time = end_time
         self.min_file_offset = min_file_offset
         self.max_file_offset = max_file_offset
+        self.waypoint_list = None
 
     def get_score(self, lat, lon, seconds, path):
         if not self.bounding_box.contains(lat, lon):
@@ -47,55 +48,57 @@ class Segment:
         if seconds < self.trip_start_seconds or seconds < self.start_time - MAX_TIME_DISTANCE or seconds > self.end_time + MAX_TIME_DISTANCE:
             return -1
 
-        list = []
+        if self.waypoint_list is None:
+            self.waypoint_list = []
 
-        with open(path + '/shapes.txt', 'r') as f:
-            names = f.readline().strip()
-            csvline = csv.CSVLine(names)
+            with open(path + '/shapes.txt', 'r') as f:
+                names = f.readline().strip()
+                csvline = csv.CSVLine(names)
 
-            f.seek(self.min_file_offset)
+                f.seek(self.min_file_offset)
 
-            while True:
-                line = f.readline().strip()
-                r = csvline.parse(line)
+                while True:
+                    line = f.readline().strip()
+                    r = csvline.parse(line)
 
-                llat = float(r['shape_pt_lat'])
-                llon = float(r['shape_pt_lon'])
+                    llat = float(r['shape_pt_lat'])
+                    llon = float(r['shape_pt_lon'])
 
-                list.append({'lat': llat, 'lon': llon})
+                    self.waypoint_list.append({'lat': llat, 'lon': llon})
 
-                if f.tell() > self.max_file_offset:
-                    break
+                    if f.tell() > self.max_file_offset:
+                        break
 
-        delta_time = self.end_time - self.start_time
+            delta_time = self.end_time - self.start_time
+
+            for i in range(len(self.waypoint_list)):
+                fraction = i / len(self.waypoint_list)
+                time = int(self.start_time + fraction * delta_time)
+                self.waypoint_list[i]['time'] = time
+
         min_distance = 1000000000
         min_index = -1
         closestLat = 0
         closestLon = 0
 
-        for i in range(len(list)):
-            fraction = i / len(list)
-            time = int(self.start_time + fraction * delta_time)
-            list[i]['time'] = time
-
-        for i in range(len(list) - 1):
-            sp1 = list[i]
-            sp2 = list[i + 1]
+        for i in range(len(self.waypoint_list) - 1):
+            sp1 = self.waypoint_list[i]
+            sp2 = self.waypoint_list[i + 1]
 
             distance = geo_util.get_min_distance(sp1, sp2, lat, lon, seconds)
 
             if distance < min_distance:
                 min_distance = distance
                 min_index = i
-                closestLat = list[i]['lat']
-                closestLon = list[i]['lon']
+                closestLat = self.waypoint_list[i]['lat']
+                closestLon = self.waypoint_list[i]['lon']
 
         print(f'- min_distance: {min_distance}')
 
         if min_distance > MAX_LOCATION_DISTANCE:
             return -1
 
-        time_distance = abs(seconds - list[min_index]['time'])
+        time_distance = abs(seconds - self.waypoint_list[min_index]['time'])
 
         if time_distance > MAX_TIME_DISTANCE:
             return -1
