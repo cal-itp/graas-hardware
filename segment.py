@@ -98,7 +98,10 @@ class Segment:
         if min_distance > MAX_LOCATION_DISTANCE:
             return -1
 
+        print(f'+ update time : {util.seconds_to_hhmm(seconds)}')
+        print(f'+ segment time: {util.seconds_to_hhmm(self.waypoint_list[min_index]["time"])}')
         time_distance = abs(seconds - self.waypoint_list[min_index]['time'])
+        print(f'- time_distance: {time_distance}')
 
         if time_distance > MAX_TIME_DISTANCE:
             return -1
@@ -107,6 +110,7 @@ class Segment:
         time_score = .5 * (MAX_TIME_DISTANCE - time_distance) / MAX_TIME_DISTANCE
 
         util.debug(f'segment update: id={self.id} trip-name={util.to_b64(self.trip_name)} score={location_score + time_score} closest-lat={closestLat} closest-lon={closestLon}')
+        util.debug(f'+ trip_name: {self.trip_name}')
         return location_score + time_score
 
     def get_trip_id(self):

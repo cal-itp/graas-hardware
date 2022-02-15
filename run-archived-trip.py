@@ -19,7 +19,8 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url):
 
     util.debug(f'- inference.TripInference.VERSION: {inference.TripInference.VERSION}')
 
-    pattern = '.*/([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-.*)/.*'
+    pattern1 = '.*/([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-.*)/.*' # yyyy-mm-dd-hh-mm-<agency>
+    pattern2 =  '.*([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]).*'     # yyyy-mm-dd-hh-mm
 
     tee = Tee()
     sys.stdout = tee
@@ -27,7 +28,11 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url):
     inf = None
 
     for df in data_files:
-        dow = get_dow(df)
+        m1 = re.search(pattern1, df)
+        name = m1.group(1)
+
+        m2 = re.search(pattern2, df)
+        dow = get_dow(m2.group(1))
 
         if dow != last_dow:
             sfn = tee.filename
@@ -38,8 +43,7 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url):
         last_dow = dow
         inf.reset_scoring()
 
-        m = re.search(pattern, df)
-        fn = output_folder + '/' + m.group(1) + '-log.txt'
+        fn = output_folder + '/' + m1.group(1) + '-log.txt'
         print(f'-- fn: {fn}')
         tee.redirect(fn)
 
@@ -60,12 +64,8 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url):
 
 # assumes that filename contains a string of format yyyy-mm-dd
 # returns day of week: 0-6 for Monday through Sunday if date string present, -1 otherwise
-def get_dow(filename):
-    pattern = '.*([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]).*'
-    m = re.search(pattern, filename)
-
-    if m:
-        yyyymmdd = m.group(1)
+def get_dow(yyyymmdd):
+    if yyyymmdd:
         date = datetime.strptime(yyyymmdd, '%Y-%m-%d')
         return date.weekday()
     else:

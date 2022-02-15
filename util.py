@@ -67,6 +67,12 @@ def hhmmss_to_seconds(s):
     seconds += int(arr[2])
     return seconds
 
+def seconds_to_hhmm(s):
+    hours = int(s / 60 / 60)
+    s -= hours * 60 * 60
+    minutes = int(s / 60)
+    return f'{hours}:{str(minutes).zfill(2)}'
+
 def seconds_to_hhmmss(s):
     hours = int(s / 60 / 60)
     s -= hours * 60 * 60

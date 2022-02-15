@@ -98,7 +98,8 @@ class TripInference:
                 self.interpolate_way_point_times(way_points, stop_times, self.stops)
                 #util.debug(timer)
 
-                trip_name = route_map[route_id]['name'] + ' @ ' + util.seconds_to_ampm_hhmm(stop_times[0]['arrival_time'])
+                #trip_name = route_map[route_id]['name'] + ' @ ' + util.seconds_to_ampm_hhmm(stop_times[0]['arrival_time'])
+                trip_name = trip_id + ' @ ' + util.seconds_to_ampm_hhmm(stop_times[0]['arrival_time'])
                 util.debug(f'-- trip_name: {trip_name}')
                 shape_length = self.shape_length_map[shape_id]
 
@@ -630,19 +631,6 @@ class TripInference:
 
             if score <= 0:
                 continue
-
-            """
-            for now, don't score updates that happen at the first stop of a trip. It is somewhat common
-            for even moderatley sized agencies to have several trips that start at the same stop at the
-            same time. Sometimes those trips have different shapes associated with them, which can mean
-            subtly different first shape points. This in turn can lead to one trip ID candidate building
-            up higher scores while vehicle is at first stop. Not scoring those first stop updates is
-            a somewhat simplistic workaround.
-            """
-            if segment.stop_id is not None:
-                st = self.stops[segment.stop_id]
-                if util.haversine_distance(lat, lon, st['lat'], st['long']) < STOP_PROXIMITY:
-                    continue
 
             if score > max_segment_score:
                 max_segment_score = score
