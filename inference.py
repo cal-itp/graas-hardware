@@ -621,8 +621,9 @@ class TripInference:
         stop_id = self.get_stop_for_position(lat, lon, STOP_PROXIMITY)
 
         multiplier = 1
-        if stop_id is not None:
-            multiplier = 10
+        ### removing stop multiplier actually gives better results with training data set
+        #if stop_id is not None:
+        #    multiplier = 10
 
         max_segment_score = 0
 
