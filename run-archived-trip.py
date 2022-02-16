@@ -33,6 +33,7 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url):
 
         m2 = re.search(pattern2, df)
         dow = get_dow(m2.group(1))
+        epoch_seconds = util.get_epoch_seconds(m2.group(1))
 
         if dow != last_dow:
             sfn = tee.filename

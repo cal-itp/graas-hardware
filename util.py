@@ -96,6 +96,19 @@ def seconds_to_ampm_hhmm(s):
     s -= minutes * 60
     return f'{hours}:{str(minutes).zfill(2)} {ampm}'
 
+# get whole seconds since 01/01/1970 for input string `s`
+# `s` is assumed to be one of the following:
+# - `None`: get seconds since epoch for current date and time
+# - yyyymmdd: get seconds since epoch for given date
+# - yyyy-mm-dd: get seconds since epoch for given date
+def get_epoch_seconds(s = None):
+    if s is None:
+        return int(datetime.now().timestamp())
+    else:
+        t = s.replace('-', '')
+        return int(datetime.strptime(t, '%Y%m%d').timestamp())
+
+
 def get_feet_as_lat_degrees(feet):
     return feet / FEET_PER_LAT_DEGREE
 

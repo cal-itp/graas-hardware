@@ -19,12 +19,13 @@ MAX_TIME_DISTANCE = 900 # seconds
 class Segment:
     id_base = 0
 
-    def __init__(self, trip_id, trip_name, trip_start_seconds, stop_id, bounding_box, start_time, end_time, min_file_offset, max_file_offset):
+    def __init__(self, segment_index, trip_id, trip_name, trip_start_seconds, stop_id, bounding_box, start_time, end_time, min_file_offset, max_file_offset):
         self.id = Segment.id_base
         Segment.id_base += 1
 
         util.debug(f'segment: id={self.id} trip_id={trip_id} top_left={bounding_box.top_left} bottom_right={bounding_box.bottom_right} start_time={util.seconds_to_hhmmss(start_time)} end_time={util.seconds_to_hhmmss(end_time)}')
 
+        self.segment_index = segment_index
         self.trip_id = trip_id
         self.trip_name = trip_name
         self.trip_start_seconds = trip_start_seconds
@@ -36,6 +37,12 @@ class Segment:
         self.min_file_offset = min_file_offset
         self.max_file_offset = max_file_offset
         self.waypoint_list = None
+
+    def set_segments_per_trip(self, count):
+        self.segments_per_trip = count
+
+    def get_trip_fraction(self):
+        return float(self.segment_index) / self.segments_per_trip
 
     def get_score(self, lat, lon, seconds, path):
         if not self.bounding_box.contains(lat, lon):
@@ -109,7 +116,7 @@ class Segment:
         location_score = .5 * (MAX_LOCATION_DISTANCE - min_distance) / MAX_LOCATION_DISTANCE
         time_score = .5 * (MAX_TIME_DISTANCE - time_distance) / MAX_TIME_DISTANCE
 
-        util.debug(f'segment update: id={self.id} trip-name={util.to_b64(self.trip_name)} score={location_score + time_score} closest-lat={closestLat} closest-lon={closestLon}')
+        util.debug(f'segment update: id={self.id} trip-name={util.to_b64(self.trip_name)} score={location_score + time_score} trip_pos=({self.segment_index}/{self.segments_per_trip}) closest-lat={closestLat} closest-lon={closestLon}')
         util.debug(f'+ trip_name: {self.trip_name}')
         return location_score + time_score
 

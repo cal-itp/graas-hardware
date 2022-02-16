@@ -18,7 +18,7 @@ STOP_CAP = 10
 class TripInference:
     VERSION = '0.2 (12/07/21)'
 
-    def __init__(self, path, url, subdivisions, dow = -1):
+    def __init__(self, path, url, subdivisions, dow = -1, epoch_seconds = -1):
         if path[-1] != '/':
             path += '/'
 
@@ -42,6 +42,9 @@ class TripInference:
         if dow < 0:
             dow = datetime.datetime.today().weekday()
         util.debug(f'- dow: {dow}')
+
+        if epoch_seconds < 0:
+            epoch_seconds = util.get_epoch_seconds()
 
         self.stops = self.get_stops()
         #util.debug(f'-- stops: {stops}')
@@ -68,9 +71,20 @@ class TripInference:
                     util.debug(f'* service id \'{service_id}\' not found in calendar map, skipping trip \'{trip_id}\'')
                     continue
 
-                if calendar_map[service_id][dow] != 1:
+                cal = calendar_map[service_id].get('cal', None)
+                if cal is not None and cal[dow] != 1:
                     util.debug(f'* dow \'{dow}\' not set, skipping trip \'{trip_id}\'')
                     continue
+
+                start_date = calendar_map[service_id].get('start_date', None)
+                end_date = calendar_map[service_id].get('end_date', None)
+
+                if start_date is not None and end_date is not None:
+                    start_seconds = util.get_epoch_seconds(start_date)
+                    end_seconds = util.get_epoch_seconds(end_date)
+                    if epoch_seconds < start_seconds or epoch_seconds > end_seconds:
+                        util.debug(f'* trip date outside service period, skipping trip \'{trip_id}\'')
+                        continue
 
                 util.debug(f'')
                 util.debug(f'-- trip_id: {trip_id} ({count}/{len(rows)})')
@@ -254,7 +268,7 @@ class TripInference:
                     cal.append(int(r[d]))
                 #util.debug(f'-- cal: {cal}')
 
-                calendar_map[service_id] = cal
+                calendar_map[service_id] = {'cal': cal, 'start_date': r.get('start_date', None), 'end_date': r.get('end_date', None)}
 
         return calendar_map
 
@@ -513,9 +527,11 @@ class TripInference:
         last_index = index
         segment_length = 0
         first_segment = True
+        segment_count = 1
 
         area = Area()
         index_list = []
+        segment_list = []
 
         skirt_size = max(int(max_segment_length / 10), 500)
         #print(f'- skirt_size: {skirt_size}')
@@ -545,6 +561,7 @@ class TripInference:
                     stop_id = first_stop['stop_id']
 
                 segment = Segment(
+                    segment_count,
                     trip_id,
                     trip_name,
                     first_stop['arrival_time'],
@@ -555,6 +572,9 @@ class TripInference:
                     way_points[segment_start]['file_offset'],
                     way_points[index]['file_offset']
                 )
+
+                segment_list.append(segment)
+                segment_count += 1
 
                 for i in index_list:
                     self.grid.add_segment(segment, i)
@@ -574,6 +594,9 @@ class TripInference:
 
             last_index = index
             index += 1
+
+        for s in segment_list:
+            s.set_segments_per_trip(segment_count - 1)
 
     # NOTE: brute force approach that returns the *first*
     # stop within max_distance feet from lat/lon

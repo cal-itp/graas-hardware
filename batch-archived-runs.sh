@@ -17,6 +17,7 @@ STATS_FILE=~/data/scripts/ti-scores-${TIME_STAMP}.txt
 DATA_FILES=`find $DATA_DIR -name updates.txt -print | sort`
 echo DATA_FILES: $DATA_FILES
 
+rm ~/tmp/202*-log.txt
 time python3 run-archived-trip.py -c ~/tmp/tuff -u $GTFS_URL $DATA_FILES > log.txt
 
 cat /dev/null > $RESULT_FILE
@@ -32,4 +33,8 @@ done
 python3 inference-stats.py $RESULT_FILE > $STATS_FILE
 tail -1 $STATS_FILE
 
-osascript -e 'display alert "Batch run complete"'
+if [[ $OSTYPE == "darwin"* ]]
+then
+  osascript -e 'say "calculation complete, meat popsicle!" using "Zarvox"'
+  osascript -e 'display alert "Batch job complete!"'
+fi
