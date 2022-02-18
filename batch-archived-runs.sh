@@ -35,6 +35,6 @@ tail -1 $STATS_FILE
 
 if [[ $OSTYPE == "darwin"* ]]
 then
-  osascript -e 'say "calculation complete, meat popsicle!" using "Zarvox"'
+  osascript -e 'say "calculation complete, your move!" using "Zarvox"'
   osascript -e 'display alert "Batch job complete!"'
 fi
