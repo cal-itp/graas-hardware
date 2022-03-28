@@ -43,6 +43,9 @@ def to_b64(s):
 def from_b64(s):
     return b64decode(s).decode('utf-8')
 
+def signum(x):
+    return math.copysign(1, x)
+
 def get_current_time_millis():
     return int(round(time.time() * 1000))
 
@@ -63,6 +66,12 @@ def hhmmss_to_seconds(s):
     seconds += int(arr[1]) * 60
     seconds += int(arr[2])
     return seconds
+
+def seconds_to_hhmm(s):
+    hours = int(s / 60 / 60)
+    s -= hours * 60 * 60
+    minutes = int(s / 60)
+    return f'{hours}:{str(minutes).zfill(2)}'
 
 def seconds_to_hhmmss(s):
     hours = int(s / 60 / 60)
@@ -87,6 +96,18 @@ def seconds_to_ampm_hhmm(s):
     s -= minutes * 60
     return f'{hours}:{str(minutes).zfill(2)} {ampm}'
 
+# get whole seconds since 01/01/1970 for input string `s`
+# `s` is assumed to be one of the following:
+# - `None`: get seconds since epoch for current date and time
+# - yyyymmdd: get seconds since epoch for given date
+# - yyyy-mm-dd: get seconds since epoch for given date
+def get_epoch_seconds(s = None):
+    if s is None:
+        return int(datetime.now().timestamp())
+    else:
+        t = s.replace('-', '')
+        return int(datetime.strptime(t, '%Y%m%d').timestamp())
+
 def get_feet_as_lat_degrees(feet):
     return feet / FEET_PER_LAT_DEGREE
 
@@ -100,7 +121,7 @@ def get_display_distance(feet):
         v = feet / FEET_PER_MILE
         return f'{v:.1f} MILES'
     else:
-        return f'{int(feet / Util.FEET_PER_MILE)} MILES'
+        return f'{int(feet / FEET_PER_MILE)} MILES'
 
 # converts coordinates from lat/long to x/y given
 # display width and height, an area instance
@@ -127,6 +148,12 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
     return EARTH_RADIUS_IN_FEET * c
 
+def distance(x0, y0, x1, y1):
+    xd = x1 - x0
+    yd = y1 - y0
+
+    return math.sqrt(xd * xd + yd * yd)
+
 def get_distance_string(feet):
     if (feet < FEET_PER_MILE):
         return f'{feet} ft'
@@ -149,6 +176,10 @@ def debug(s):
 def error(s):
     print(f'*** {s}')
     sys.stdout.flush()
+
+def early_exit():
+    error('early exit')
+    exit(1)
 
 def to_decimal(v, dir):
     #debug('to_decimal()')
@@ -206,42 +237,50 @@ def update_cache_if_needed(cache_path, url):
     if not os.path.isdir(cache_path):
         os.makedirs(cache_path)
 
-    headers = {'User-Agent': 'python-3'}
-    r = requests.head(url, headers=headers, allow_redirects=True)
-    debug(f'- r.headers: {r.headers}')
-    url_time = r.headers.get('last-modified', None)
-    debug(f'- url_time: {url_time}')
-
-    if url_time is None:
-        debug(f'* can\'t access static GTFS URL {url}, aborting cache update')
-        return
-
-    url_date = datetime.strptime(url_time, '%a, %d %b %Y %H:%M:%S %Z')
-    file_date = datetime.fromtimestamp(0, url_date.tzinfo)
     file_name = cache_path + 'gtfs.zip'
-    if os.path.exists(file_name):
-        file_date = datetime.fromtimestamp(os.path.getmtime(file_name))
 
-    if datetime.timestamp(url_date) <= datetime.timestamp(file_date):
-        debug('+ gtfs.zip up-to-date, nothing to do')
-        return
+    if url.startswith('http://') or url.startswith('https://'):
+        headers = {'User-Agent': 'python-3'}
+        r = requests.head(url, headers=headers, allow_redirects=True)
+        debug(f'- r.headers: {r.headers}')
+        url_time = r.headers.get('last-modified', None)
+        debug(f'- url_time: {url_time}')
 
-    debug('+ gtfs.zip out of date, downloading...')
+        if url_time is None:
+            debug(f'* can\'t access static GTFS URL {url}, aborting cache update')
+            return
 
-    """
-    req = request.Request(url)
-    resp = request.urlopen(req)
-    debug(f'- resp.code: {resp.code}')
-    content = resp.read()
-    """
+        url_date = datetime.strptime(url_time, '%a, %d %b %Y %H:%M:%S %Z')
+        file_date = datetime.fromtimestamp(0, url_date.tzinfo)
+        if os.path.exists(file_name):
+            file_date = datetime.fromtimestamp(os.path.getmtime(file_name))
 
-    r = requests.get(url)
-    debug(f'- r.status_code: {r.status_code}')
+        if datetime.timestamp(url_date) <= datetime.timestamp(file_date):
+            debug('+ gtfs.zip up-to-date, nothing to do')
+            return
 
-    with open(file_name, 'wb') as f:
-        #f.write(content)
-        f.write(r.content)
-        f.close()
+        debug('+ gtfs.zip out of date, downloading...')
+
+        r = requests.get(url)
+        debug(f'- r.status_code: {r.status_code}')
+
+        with open(file_name, 'wb') as f:
+            f.write(r.content)
+            f.close()
+    else:
+        # assume url is in fact a path to a local file
+        ts_archive = os.path.getmtime(url)
+        try:
+            ts_cache = os.path.getmtime(file_name)
+        except:
+            print(f'* cached gtfs file {file_name} not accessible, forcing update')
+            ts_cache = -1
+
+        if ts_archive < ts_cache:
+            debug('+ gtfs.zip up-to-date, nothing to do')
+            return
+
+        os.system(f'cp {url} {file_name}')
 
     debug('+ gtfs.zip downloaded')
     gtfs_zip = ZipFile(file_name)

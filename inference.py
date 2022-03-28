@@ -1,6 +1,7 @@
-#from csvline import CSVLine
+import copy
 import csv
 import datetime
+import math
 import time
 import util
 from shapepoint import ShapePoint
@@ -9,15 +10,15 @@ from grid import Grid
 from segment import Segment
 from timer import Timer
 
-FEET_PER_MILE = 5280
 STOP_PROXIMITY = 150
-SCORE_THRESHOLD = 50
+SCORE_THRESHOLD = 7
 MIN_FLUSH_TIME_DELTA = 30 * 60
+STOP_CAP = 10
 
 class TripInference:
     VERSION = '0.2 (12/07/21)'
 
-    def __init__(self, path, url, subdivisions):
+    def __init__(self, path, url, subdivisions, dow = -1, epoch_seconds = -1):
         if path[-1] != '/':
             path += '/'
 
@@ -37,14 +38,21 @@ class TripInference:
         self.populateBoundingBox(self.area)
         util.debug(f'- self.area: {self.area}')
         self.grid = Grid(self.area, subdivisions)
-        dow = datetime.datetime.today().weekday()
+
+        if dow < 0:
+            dow = datetime.datetime.today().weekday()
         util.debug(f'- dow: {dow}')
+
+        if epoch_seconds < 0:
+            epoch_seconds = util.get_epoch_seconds()
 
         self.stops = self.get_stops()
         #util.debug(f'-- stops: {stops}')
 
         self.preload_stop_times()
         self.preload_shapes()
+
+        self.compute_shape_lengths()
 
         with open(path + '/trips.txt', 'r') as f:
             reader = csv.DictReader(f)
@@ -63,9 +71,20 @@ class TripInference:
                     util.debug(f'* service id \'{service_id}\' not found in calendar map, skipping trip \'{trip_id}\'')
                     continue
 
-                if calendar_map[service_id][dow] != 1:
+                cal = calendar_map[service_id].get('cal', None)
+                if cal is not None and cal[dow] != 1:
                     util.debug(f'* dow \'{dow}\' not set, skipping trip \'{trip_id}\'')
                     continue
+
+                start_date = calendar_map[service_id].get('start_date', None)
+                end_date = calendar_map[service_id].get('end_date', None)
+
+                if start_date is not None and end_date is not None:
+                    start_seconds = util.get_epoch_seconds(start_date)
+                    end_seconds = util.get_epoch_seconds(end_date)
+                    if epoch_seconds < start_seconds or epoch_seconds > end_seconds:
+                        util.debug(f'* trip date outside service period, skipping trip \'{trip_id}\'')
+                        continue
 
                 util.debug(f'')
                 util.debug(f'-- trip_id: {trip_id} ({count}/{len(rows)})')
@@ -76,7 +95,7 @@ class TripInference:
                 #util.debug(f'-- shape_id: {shape_id}')
                 timer = Timer('way points')
                 way_points = self.get_shape_points(shape_id)
-                util.debug(timer)
+                #util.debug(timer)
                 #util.debug(f'-- way_points: {way_points}')
                 util.debug(f'-- len(way_points): {len(way_points)}')
 
@@ -86,20 +105,28 @@ class TripInference:
 
                 timer = Timer('stop times')
                 stop_times = self.get_stop_times(trip_id)
-                util.debug(timer)
+                #util.debug(timer)
                 #util.debug(f'-- stop_times: {stop_times}')
                 util.debug(f'-- len(stop_times): {len(stop_times)}')
                 timer = Timer('interpolate')
                 self.interpolate_way_point_times(way_points, stop_times, self.stops)
-                util.debug(timer)
+                #util.debug(timer)
 
-                trip_name = route_map[route_id]['name'] + ' @ ' + util.seconds_to_ampm_hhmm(stop_times[0]['arrival_time'])
+                #trip_name = route_map[route_id]['name'] + ' @ ' + util.seconds_to_ampm_hhmm(stop_times[0]['arrival_time'])
+                trip_name = trip_id + ' @ ' + util.seconds_to_ampm_hhmm(stop_times[0]['arrival_time'])
                 util.debug(f'-- trip_name: {trip_name}')
-                segment_length = 2 * FEET_PER_MILE ### TODO derive segment length from trip length
+                shape_length = self.shape_length_map[shape_id]
+
+                if shape_length is None:
+                    segment_length = 2 * util.FEET_PER_MILE
+                else:
+                    segment_length = int(shape_length / 30)
+
+                #util.debug(f'-- segment_length: {segment_length}')
                 timer = Timer('segments')
-                self.make_trip_segments(trip_id, trip_name, way_points, segment_length)
-                util.debug(timer)
-                util.debug(loop_timer)
+                self.make_trip_segments(trip_id, trip_name, stop_times[0], way_points, segment_length)
+                #util.debug(timer)
+                #util.debug(loop_timer)
 
         util.debug(load_timer)
         util.debug(f'-- self.grid: {self.grid}')
@@ -125,6 +152,26 @@ class TripInference:
                 lat = float(r['shape_pt_lat'])
                 lon = float(r['shape_pt_lon'])
                 area.update(lat, lon)
+
+    def compute_shape_lengths(self):
+        self.shape_length_map = {}
+
+        for shape_id in self.shape_map:
+            #util.debug(f'-- shape_id: {shape_id}')
+            point_list = self.shape_map[shape_id]
+            #util.debug(f'-- point_list: {point_list}')
+            length = 0
+
+            for i in range(len(point_list) - 1):
+                p1 = point_list[i];
+                #util.debug(f'--- p1: {p1}')
+                p2 = point_list[i + 1]
+                #util.debug(f'--- p2: {p2}')
+
+                length += util.haversine_distance(p1['lat'], p1['long'], p2['lat'], p2['long'])
+
+            self.shape_length_map[shape_id] = length
+            util.debug(f'++ length for shape {shape_id}: {util.get_display_distance(length)}')
 
     def preload_shapes(self):
         self.shape_map = {}
@@ -156,7 +203,13 @@ class TripInference:
                     plist = []
                     self.shape_map[shape_id] = plist
 
-                plist.append({'lat': lat, 'long': lon, 'file_offset': file_offset})
+                entry = {'lat': lat, 'long': lon, 'file_offset': file_offset}
+                sdt = r.get('shape_dist_traveled', None)
+
+                if sdt is not None and len(sdt) > 0:
+                    entry['traveled'] = float(sdt)
+
+                plist.append(entry)
 
     def get_shape_points(self, shape_id):
         return self.shape_map.get(shape_id, None)
@@ -215,7 +268,7 @@ class TripInference:
                     cal.append(int(r[d]))
                 #util.debug(f'-- cal: {cal}')
 
-                calendar_map[service_id] = cal
+                calendar_map[service_id] = {'cal': cal, 'start_date': r.get('start_date', None), 'end_date': r.get('end_date', None)}
 
         return calendar_map
 
@@ -241,7 +294,15 @@ class TripInference:
                     slist = []
                     self.stop_time_map[trip_id] = slist
 
-                slist.append({'arrival_time': util.hhmmss_to_seconds(arrival_time), 'stop_id': stop_id})
+                entry = {'arrival_time': util.hhmmss_to_seconds(arrival_time), 'stop_id': stop_id}
+                sdt = r.get('shape_dist_traveled', None)
+
+                if sdt is not None and len(sdt) > 0:
+                    entry['traveled'] = float(sdt)
+
+                #print(f'- entry: {entry}')
+
+                slist.append(entry)
 
     def get_stop_times(self, trip_id):
         return self.stop_time_map.get(trip_id, None)
@@ -250,6 +311,148 @@ class TripInference:
             wp = way_points[wi]
             sp = stops[stop_times[si]['stop_id']]
             return util.haversine_distance(wp['lat'], wp['long'], sp['lat'], sp['long'])
+
+
+    """
+    For simpler trips `shape_dist_traveled` is optional. If the attribute is missing, we can take the following approach:
+    - for each stop, assign a fraction of arrival time at that stop to total trip time -> fractions list
+    - for i in len(fractions)
+    -   compute index into shape list as int(fractions[i] * len(way_points) -> anchor_list
+    - explore neighboring points in way_points for each match_list entry, going up to half the points until previous or next anchor point
+    - adjust anchor points if closer match found
+    - repeat until stable (current anchor list equals pevious anchor list) of max tries reached
+    """
+    def create_anchor_list_iteratively(self, way_points, stop_times, stops):
+        start_seconds = stop_times[0]['arrival_time']
+        stop_seconds = stop_times[-1]['arrival_time']
+        total_seconds = float(stop_seconds - start_seconds)
+        #print(f'- total_seconds: {total_seconds}')
+        anchor_list = []
+
+        for i in range(len(stop_times)):
+            #print(f'-- i: {i}')
+            seconds = stop_times[i]['arrival_time'] - start_seconds
+            #print(f'-- seconds: {seconds}')
+            frac = seconds / total_seconds
+            #print(f'-- frac: {frac}')
+            j = int(frac * (len(way_points) - 1))
+            #print(f'-- j: {j}')
+            anchor_list.append({'index': j, 'time': stop_times[i]['arrival_time']})
+
+        for i in range(20):
+            last_anchor_list = copy.deepcopy(anchor_list)
+            #print(f'-- last_anchor_list: {last_anchor_list}')
+
+            # explore neighbors in anchor_list, potentially changing index fields
+            for j in range(len(last_anchor_list)):
+                #print(f'-- j: {j}')
+                c = last_anchor_list[j]
+                #print(f'-- c: {c}')
+
+                p = c
+                if j > 0:
+                    p = last_anchor_list[j - 1]
+
+                n = c
+                if j < len(last_anchor_list) - 1:
+                    n = last_anchor_list[j + 1]
+
+                p1 = stops[stop_times[j]['stop_id']]
+                p2 = way_points[c['index']]
+                min_diff = util.haversine_distance(p1['lat'], p1['long'], p2['lat'], p2['long'])
+                min_index = c['index']
+                #print(f'-- min_index: {min_index}')
+
+                #print(f'-- c["index"]: {c["index"]}')
+                #print(f'-- p["index"]: {p["index"]}')
+                #print(f'-- n["index"]: {n["index"]}')
+
+                kf = int(p['index'] + math.ceil((c['index'] - p['index']) / 2))
+                kt = int(c['index'] + (n['index'] - c['index']) / 2)
+
+                #print(f'-- kf: {kf}, kt: {kt}')
+
+                for k in range(kf, kt):
+                    p2 = way_points[k]
+                    diff = util.haversine_distance(p1['lat'], p1['long'], p2['lat'], p2['long'])
+
+                    if diff < min_diff:
+                        min_diff = diff
+                        min_index = k
+
+                #print(f'++ min_index: {min_index}')
+                anchor_list[j]['index'] = min_index
+
+            #print(f'-- anchor_list     : {anchor_list}')
+
+            stable = True
+
+            for j in range(len(anchor_list)):
+                i1 = anchor_list[j]['index']
+                i2 = last_anchor_list[j]['index']
+
+                if i1 != i2:
+                    #print(f'* {i1} != {i2}')
+                    stable = False
+                    break
+
+            if stable:
+                break
+
+        #print(f'++ anchor_list     : {anchor_list}')
+
+        return anchor_list
+
+    """
+    anchor_list establishes a relationship between the list of stops for a trip and that trip's way points as described in shapes.txt.
+    The list has one entry per stop. Each entry has an index into way_points to map to the closest shape point and the time when
+    a vehicle is scheduled to arrive at that point (as given in stop_times.txt). anchor_list is an intermediate point in assigning
+    timestamps to each point of the trip shape
+
+    Complex trips with self-intersecting or self-overlapping segments are supposed to have `shape_dist_traveled` attributes for their
+    shape.txt and stop_times.txt entries. This allows for straight-forward finding of shape points close to stops.
+    """
+    def create_anchor_list(self, way_points, stop_times, stops):
+        #print(f' - len(way_points): {len(way_points)}')
+        #print(f' - len(stop_times): {len(stop_times)}')
+        #print(f' - len(stops): {len(stops)}')
+
+        annotated = True
+
+        for i in range(len(stop_times)):
+            if not stop_times[i].get('traveled', False):
+                annotated = False
+                break;
+
+        if annotated:
+            for i in range(len(way_points)):
+                if not way_points[i].get('traveled', False):
+                    annotated = False
+                    break;
+
+        if not annotated:
+            return self.create_anchor_list_iteratively(way_points, stop_times, stops)
+
+        anchor_list = []
+
+        for i in range(len(stop_times)):
+            traveled = stop_times[i]['traveled']
+            time = stop_times[i]['arrival_time']
+
+            min_difference = float('inf')
+            min_index = -1
+
+            for j in range(len(way_points)):
+                t = way_points[j]['traveled']
+                diff = math.abs(traveled - t)
+
+                if diff < min_difference:
+                    min_difference = diff
+                    min_index = j
+
+            anchor_list.append({'index': min_index, 'time': time})
+
+        return anchor_list
 
     """
     This is a naive, brute force approach that may well fail for self-intersecting or
@@ -261,8 +464,12 @@ class TripInference:
     - repeat until stable
     """
     def interpolate_way_point_times(self, way_points, stop_times, stops):
-        index_list = []
+        anchor_list = self.create_anchor_list(way_points, stop_times, stops)
         firstStop = True
+
+        #print(f'interpolate_way_point_times()')
+        #util.debug(f'- len(way_points): {len(way_points)}')
+        #util.debug(f'- len(stop_times): {len(stop_times)}')
 
         for st in stop_times:
             sp = stops[st['stop_id']]
@@ -271,25 +478,12 @@ class TripInference:
                 sp['first_stop'] = True
                 firstStop = False
 
-            min_distance = 1000000
-            min_index = -1
+        util.debug(f'- anchor_list: {anchor_list}')
+        #util.debug(f'- len(anchor_list): {len(anchor_list)}')
 
-            for i in range(len(way_points)):
-                wp = way_points[i]
-                distance = util.haversine_distance(wp['lat'], wp['long'], sp['lat'], sp['long'])
-
-                if distance < min_distance:
-                    min_distance = distance
-                    min_index = i
-
-            index_list.append({'index': min_index, 'time': st['arrival_time']})
-
-        #util.debug(f'- index_list: {index_list}')
-        #util.debug(f'- len(index_list): {len(index_list)}')
-
-        for i in range(len(index_list) - 1):
-            start = index_list[i]
-            end = index_list[i + 1]
+        for i in range(len(anchor_list) - 1):
+            start = anchor_list[i]
+            end = anchor_list[i + 1]
             tdelta = end['time'] - start['time']
             idelta = end['index'] - start['index']
 
@@ -304,15 +498,15 @@ class TripInference:
 
         #util.debug('--------------------------')
 
-        index = index_list[0]['index']
-        time = index_list[0]['time']
+        index = anchor_list[0]['index']
+        time = anchor_list[0]['time']
 
         while index >= 0:
             index -= 1
             way_points[index]['time'] = time
 
-        index = index_list[-1]['index']
-        time = index_list[-1]['time']
+        index = anchor_list[-1]['index']
+        time = anchor_list[-1]['time']
 
         while index < len(way_points):
             way_points[index]['time'] = time
@@ -323,14 +517,24 @@ class TripInference:
             if not 'time' in way_points[i]:
                 util.debug(f'.. {i}')
 
-    def make_trip_segments(self, trip_id, trip_name, way_points, max_segment_length):
+    def make_trip_segments(self, trip_id, trip_name, first_stop, way_points, max_segment_length):
+        #print(f'- make_trip_segments()')
+        #print(f'- max_segment_length: {max_segment_length}')
+        #print(f'- way_points: {way_points}')
+
         segment_start = 0
         index = segment_start
         last_index = index
         segment_length = 0
+        first_segment = True
+        segment_count = 1
 
         area = Area()
         index_list = []
+        segment_list = []
+
+        skirt_size = max(int(max_segment_length / 10), 500)
+        #print(f'- skirt_size: {skirt_size}')
 
         while index < len(way_points):
             lp = way_points[last_index]
@@ -346,17 +550,31 @@ class TripInference:
             segment_length += distance
 
             if segment_length >= max_segment_length or index == len(way_points) - 1:
-                area.extend(1000)
+                area.extend(skirt_size)
+
+                if segment_start == 0 and way_points[segment_start]['time'] == way_points[index]['time']:
+                    util.error(f'0 duration first segment for trip {trip_id}')
+
+                stop_id = None
+                if first_segment:
+                    first_segment = False
+                    stop_id = first_stop['stop_id']
 
                 segment = Segment(
+                    segment_count,
                     trip_id,
                     trip_name,
+                    first_stop['arrival_time'],
+                    stop_id,
                     area,
                     way_points[segment_start]['time'],
                     way_points[index]['time'],
                     way_points[segment_start]['file_offset'],
                     way_points[index]['file_offset']
                 )
+
+                segment_list.append(segment)
+                segment_count += 1
 
                 for i in index_list:
                     self.grid.add_segment(segment, i)
@@ -368,19 +586,36 @@ class TripInference:
                 index += 1
                 last_index = index
                 segment_start = index
+
+                p = way_points[max(segment_start - 1, 0)]
+                area.update(p['lat'], p['long'])
+
                 continue
 
             last_index = index
             index += 1
 
+        for s in segment_list:
+            s.set_segments_per_trip(segment_count - 1)
+
     # NOTE: brute force approach that returns the *first*
     # stop within max_distance feet from lat/lon
     def get_stop_for_position(self, lat, lon, max_distance):
-        for stop_id in self.stops:
-            stop = self.stops[stop_id]
+        stop_id = None
+
+        for id in self.stops:
+            stop = self.stops[id]
             if util.haversine_distance(lat, lon, stop['lat'], stop['long']) < max_distance:
-                return stop_id
-        return None
+                stop_id = id
+                break
+
+        return stop_id
+
+    def reset_scoring(self):
+        util.debug('+++ reset scoring! +++')
+        self.trip_candidates = {}
+        self.last_candidate_flush = time.time()
+
 
     def check_for_trip_start(self, stop_id):
         if not stop_id in self.stops:
@@ -390,9 +625,7 @@ class TripInference:
         delta = time.time() - self.last_candidate_flush
 
         if 'first_stop' in stop and delta >= MIN_FLUSH_TIME_DELTA:
-            util.debug('+++ flushing trip candidates! +++')
-            self.trip_candidates = {}
-            self.last_candidate_flush = time.time()
+            self.reset_scoring()
 
     ###
     ### FIXME: trip candidate list needs to be flushed when new trip begins
@@ -408,15 +641,21 @@ class TripInference:
 
         util.debug(f'- len(segment_list): {len(segment_list)}')
 
-        multiplier = 1
         stop_id = self.get_stop_for_position(lat, lon, STOP_PROXIMITY)
-        if not stop_id is None:
-            multiplier = 10
+
+        multiplier = 1
+        ### removing stop multiplier actually gives better results with training data set
+        #if stop_id is not None:
+        #    multiplier = 10
 
         max_segment_score = 0
 
         for segment in segment_list:
             score = multiplier * segment.get_score(lat, lon, seconds, self.path)
+
+            if score <= 0:
+                continue
+
             if score > max_segment_score:
                 max_segment_score = score
 
@@ -425,19 +664,22 @@ class TripInference:
             if trip_id in self.trip_candidates:
                 candidate = self.trip_candidates[trip_id]
             else:
-                candidate = {'score': 0}
+                candidate = {'score': 0, 'name': segment.trip_name}
                 self.trip_candidates[trip_id] = candidate
 
             candidate['score'] += score
 
-        if max_segment_score > 0 and not stop_id is None:
+        if max_segment_score > 0 and stop_id is not None:
             self.check_for_trip_start(stop_id)
 
         max_score = 0
         max_trip_id = None
 
         for trip_id in self.trip_candidates:
-            score = self.trip_candidates[trip_id]['score']
+            cand = self.trip_candidates[trip_id]
+            score = cand['score']
+            name = cand['name']
+            util.debug(f'candidate update: id={trip_id} trip-name={util.to_b64(name)} score={score}')
 
             if score > max_score:
                 max_score = score
