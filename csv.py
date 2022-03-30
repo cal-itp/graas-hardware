@@ -38,7 +38,7 @@ def parse(names, line):
 
 class DictReader:
     def __init__(self, f):
-        s = f.readline().strip()
+        s = f.readline()
 
         # utf-8 BOM
         if s.startswith('\ufeff'):
