@@ -40,6 +40,12 @@ class DictReader:
     def __init__(self, f):
         s = f.readline().strip()
 
+        # utf-8 BOM
+        if s.startswith('\ufeff'):
+            s = s[1:]
+
+        s = s.strip()
+
         self.names = s.split(',')
         self.rows = []
         self.rowIndex = 0
