@@ -26,13 +26,14 @@ echo DATA_FILES: $DATA_FILES
 rm -f $OUTPUT_DIR/202*-log.txt
 time python3 run-archived-trip.py -c $CACHE_DIR -u $GTFS_URL $DATA_FILES > $OUTPUT_DIR/log.txt
 
+echo RESULT_FILE: $RESULT_FILE
 cat /dev/null > $RESULT_FILE
 
-for i in `ls $DATA_DIR | grep "^202*"`
+for i in `ls $DATA_DIR/trip-inference-training/included/ | grep "^202*"`
 do
   echo i: $i >> $RESULT_FILE
   LOG=$OUTPUT_DIR/$i-log.txt
-  echo "expected: "` head -1 $DATA_DIR/$i/metadata.txt | sed 's/.*: //'` >> $RESULT_FILE
+  echo "expected: "` head -1 $DATA_DIR/trip-inference-training/included/$i/metadata.txt | sed 's/.*: //'` >> $RESULT_FILE
   grep "^- trip_id:" $LOG | uniq -c >> $RESULT_FILE
 done
 

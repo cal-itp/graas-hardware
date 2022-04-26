@@ -38,7 +38,7 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url):
         if dow != last_dow:
             sfn = tee.filename
             tee.redirect()
-            inf = inference.TripInference(cache_folder, static_gtfs_url, 15, dow)
+            inf = inference.TripInference(cache_folder, static_gtfs_url, 15, dow, epoch_seconds)
             #tee.redirect(sfn)
 
         last_dow = dow

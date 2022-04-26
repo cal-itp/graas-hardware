@@ -45,6 +45,7 @@ class TripInference:
 
         if epoch_seconds < 0:
             epoch_seconds = util.get_epoch_seconds()
+        util.debug(f'+ epoch_seconds: {datetime.datetime.fromtimestamp(epoch_seconds)}')
 
         self.stops = self.get_stops()
         #util.debug(f'-- stops: {stops}')
@@ -261,7 +262,7 @@ class TripInference:
 
             for r in rows:
                 service_id = r['service_id']
-                #util.debug(f'-- service id: {service_id}')
+                util.debug(f'-- service id: {service_id}')
                 cal = []
 
                 for d in dow:
