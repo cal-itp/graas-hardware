@@ -4,6 +4,7 @@ import datetime
 import math
 import time
 import util
+import platform
 from shapepoint import ShapePoint
 from area import Area
 from grid import Grid
@@ -45,6 +46,7 @@ class TripInference:
 
         if epoch_seconds < 0:
             epoch_seconds = util.get_epoch_seconds()
+        util.debug(f'+ epoch_seconds: {datetime.datetime.fromtimestamp(epoch_seconds)}')
 
         self.stops = self.get_stops()
         #util.debug(f'-- stops: {stops}')
@@ -54,7 +56,7 @@ class TripInference:
 
         self.compute_shape_lengths()
 
-        with open(path + '/trips.txt', 'r') as f:
+        with platform.get_text_file_contents(path + '/trips.txt') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
             count = 1
@@ -135,7 +137,7 @@ class TripInference:
         self.shape_map = {}
 
     def populateBoundingBox(self, area):
-        with open(self.path + '/shapes.txt', 'r') as f:
+        with platform.get_text_file_contents(self.path + '/shapes.txt') as f:
             names = f.readline().strip()
             #util.debug(f'-- names: {names}')
             csvline = csv.CSVLine(names)
@@ -176,7 +178,7 @@ class TripInference:
     def preload_shapes(self):
         self.shape_map = {}
 
-        with open(self.path + '/shapes.txt', 'r') as f:
+        with platform.get_text_file_contents(self.path + '/shapes.txt') as f:
             names = f.readline().strip()
             #util.debug(f'-- names: {names}')
             csvline = csv.CSVLine(names)
@@ -217,7 +219,7 @@ class TripInference:
     def get_stops(self):
         slist = {}
 
-        with open(self.path + '/stops.txt', 'r') as f:
+        with platform.get_text_file_contents(self.path + '/stops.txt') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
 
@@ -235,7 +237,7 @@ class TripInference:
         #util.debug(f'get_route_map()')
         route_map = {}
 
-        with open(self.path + '/routes.txt', 'r') as f:
+        with platform.get_text_file_contents(self.path + '/routes.txt') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
 
@@ -254,14 +256,14 @@ class TripInference:
         #util.debug(f'get_calendar_map()')
         calendar_map = {}
 
-        with open(self.path + '/calendar.txt', 'r') as f:
+        with platform.get_text_file_contents(self.path + '/calendar.txt') as f:
             dow = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
             reader = csv.DictReader(f)
             rows = list(reader)
 
             for r in rows:
                 service_id = r['service_id']
-                #util.debug(f'-- service id: {service_id}')
+                util.debug(f'-- service id: {service_id}')
                 cal = []
 
                 for d in dow:
@@ -275,7 +277,7 @@ class TripInference:
     def preload_stop_times(self):
         self.stop_time_map = {}
 
-        with open(self.path + '/stop_times.txt', 'r') as f:
+        with platform.get_text_file_contents(self.path + '/stop_times.txt') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
 

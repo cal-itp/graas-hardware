@@ -5,9 +5,9 @@ import requests
 from urllib import request
 import time
 from datetime import datetime
-import os
 import sys
 import random
+import platform
 from shapepoint import ShapePoint
 from zipfile import ZipFile
 
@@ -223,19 +223,12 @@ def sign(str, sk):
         debug(f'*** signature failure: {sys.exc_info()[0]}')
         return None
 
-def read_file(path):
-    #debug('read_file()')
-    #debug(f'- path: {path}')
-    with open(path, 'r') as f:
-        return f.read()
-
 def update_cache_if_needed(cache_path, url):
     debug(f'update_cache_if_needed()')
     debug(f'- cache_path: {cache_path}')
     debug(f'- url: {url}')
 
-    if not os.path.isdir(cache_path):
-        os.makedirs(cache_path)
+    platform.ensure_resource_path(cache_path)
 
     file_name = cache_path + 'gtfs.zip'
 
@@ -252,8 +245,8 @@ def update_cache_if_needed(cache_path, url):
 
         url_date = datetime.strptime(url_time, '%a, %d %b %Y %H:%M:%S %Z')
         file_date = datetime.fromtimestamp(0, url_date.tzinfo)
-        if os.path.exists(file_name):
-            file_date = datetime.fromtimestamp(os.path.getmtime(file_name))
+        if platform.resource_exists(file_name):
+            file_date = datetime.fromtimestamp(platform.get_mtime(file_name))
 
         if datetime.timestamp(url_date) <= datetime.timestamp(file_date):
             debug('+ gtfs.zip up-to-date, nothing to do')
@@ -264,14 +257,12 @@ def update_cache_if_needed(cache_path, url):
         r = requests.get(url)
         debug(f'- r.status_code: {r.status_code}')
 
-        with open(file_name, 'wb') as f:
-            f.write(r.content)
-            f.close()
+        platform.write_to_file(file_name, r.content)
     else:
         # assume url is in fact a path to a local file
-        ts_archive = os.path.getmtime(url)
+        ts_archive = platform.get_mtime(url)
         try:
-            ts_cache = os.path.getmtime(file_name)
+            ts_cache = platform.get_mtime(file_name)
         except:
             print(f'* cached gtfs file {file_name} not accessible, forcing update')
             ts_cache = -1
@@ -280,17 +271,9 @@ def update_cache_if_needed(cache_path, url):
             debug('+ gtfs.zip up-to-date, nothing to do')
             return
 
-        os.system(f'cp {url} {file_name}')
+        platform.copy_file(url, file_name)
 
     debug('+ gtfs.zip downloaded')
-    gtfs_zip = ZipFile(file_name)
     names = ['calendar.txt', 'routes.txt', 'stops.txt', 'stop_times.txt', 'shapes.txt', 'trips.txt']
-    for n in names:
-        debug(f'-- zip entry: {n}')
-        ze = gtfs_zip.open(n)
-        content = ze.read().decode('utf-8')
-
-        with open(cache_path + n, 'w') as ff:
-            ff.write(content)
-            ff.close()
+    platform.unpack_zip(file_name, cache_path, names)
 
