@@ -8,6 +8,7 @@ set -x
 echo "waiting for system to come online..."
 sleep 10
 
+source /home/pi/venv/graas/bin/activate
 . /etc/environment
 cd $GRASS_ROOT
 GRASS_TUNNEL=$GRASS_TUNNEL python debuggee.py
