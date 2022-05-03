@@ -85,7 +85,7 @@ class TripInference:
                     start_seconds = util.get_epoch_seconds(start_date)
                     end_seconds = util.get_epoch_seconds(end_date)
                     if epoch_seconds < start_seconds or epoch_seconds > end_seconds:
-                        util.debug(f'* trip date outside service period, skipping trip \'{trip_id}\'')
+                        util.debug(f'* trip date outside service period (start: {start_date}, end: {end_date}), skipping trip \'{trip_id}\'')
                         continue
 
                 util.debug(f'')
