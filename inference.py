@@ -1,7 +1,9 @@
 import copy
 import csv
 import datetime
+import json
 import math
+import os
 import time
 import util
 import platform
@@ -30,10 +32,10 @@ class TripInference:
 
         self.path = path
         calendar_map = self.get_calendar_map()
-        util.debug(f'- calendar_map: {calendar_map}')
+        util.debug(f'- calendar_map: {json.dumps(calendar_map, indent = 4)}')
 
         route_map = self.get_route_map()
-        util.debug(f'- route_map: {route_map}')
+        util.debug(f'- route_map: {json.dumps(route_map, indent = 4)}')
 
         self.area = Area()
         self.populateBoundingBox(self.area)
@@ -55,6 +57,7 @@ class TripInference:
         self.preload_shapes()
 
         self.compute_shape_lengths()
+        self.block_map = {}
 
         with platform.get_text_file_contents(path + '/trips.txt') as f:
             reader = csv.DictReader(f)
@@ -107,6 +110,27 @@ class TripInference:
 
                 timer = Timer('stop times')
                 stop_times = self.get_stop_times(trip_id)
+
+                block_id = r.get('block_id', None)
+                #util.debug(f'-- block_id: {block_id}')
+
+                if block_id is not None and len(block_id) > 0 and stop_times is not None and len(stop_times) > 0:
+                    trip_list = self.block_map.get(block_id, None)
+
+                    if trip_list is None:
+                        trip_list = []
+                        self.block_map[block_id] = trip_list
+
+                    start_time = stop_times[0].get('arrival_time', None)
+                    end_time = stop_times[-1].get('arrival_time', None)
+
+                    if start_time is not None and end_time is not None:
+                        trip_list.append({
+                            'trip_id': trip_id,
+                            'start_time': start_time,
+                            'end_time': end_time
+                        })
+
                 #util.debug(timer)
                 #util.debug(f'-- stop_times: {stop_times}')
                 util.debug(f'-- len(stop_times): {len(stop_times)}')
@@ -129,6 +153,8 @@ class TripInference:
                 self.make_trip_segments(trip_id, trip_name, stop_times[0], way_points, segment_length)
                 #util.debug(timer)
                 #util.debug(loop_timer)
+
+        util.debug(f'-- self.block_map: {json.dumps(self.block_map, indent = 4)}')
 
         util.debug(load_timer)
         util.debug(f'-- self.grid: {self.grid}')
@@ -289,6 +315,7 @@ class TripInference:
                     continue
 
                 stop_id = r['stop_id']
+                stop_sequence = r['stop_sequence']
 
                 slist = self.stop_time_map.get(trip_id, None)
 
@@ -296,7 +323,7 @@ class TripInference:
                     slist = []
                     self.stop_time_map[trip_id] = slist
 
-                entry = {'arrival_time': util.hhmmss_to_seconds(arrival_time), 'stop_id': stop_id}
+                entry = {'arrival_time': util.hhmmss_to_seconds(arrival_time), 'stop_id': stop_id, 'stop_sequence': stop_sequence}
                 sdt = r.get('shape_dist_traveled', None)
 
                 if sdt is not None and len(sdt) > 0:
@@ -629,13 +656,54 @@ class TripInference:
         if 'first_stop' in stop and delta >= MIN_FLUSH_TIME_DELTA:
             self.reset_scoring()
 
-    ###
-    ### FIXME: trip candidate list needs to be flushed when new trip begins
-    ### How can we tell that a new trip begins? current location gets a non-
-    ### zero score, matches lat/long of first stop of a trip, and there hasn't
-    ### been another first stop trip match in a while
-    ###
-    def get_trip_id(self, lat, lon, seconds):
+    # returns None for trips filtered out for unmatched day or week,
+    # calendar validity period, etc.
+    def get_block_id_for_trip(self, trip_id):
+        for b in self.block_map:
+            trip_list = self.block_map[b]
+            for t in trip_list:
+                if t['trip_id'] == trip_id:
+                    return b
+        return None
+
+    def get_stop_time_entities(self, trip_id, time_offset):
+        index = self.get_remaining_stops_index(trip_id, time_offset)
+        stop_list = self.stop_time_map.get(trip_id, [])
+        entities = []
+
+        for i in range(index, len(stop_list)):
+            e = {
+                ### implement me
+                ### pass config object as constructor arg?
+                ###
+                """
+                . agency-id
+                . trip-id
+                . stop-sequence
+                . delay (+/- offset in seconds)
+                . vehicle-id
+                . timestamp
+                """
+            }
+            entities.append(e)
+
+        return json.dumps(entities, separators=(',', ':'))
+
+    # assumes that stop_list entries are sorted by 'arrival_time'
+    def get_remaining_stops_index(self, trip_id, time_offset):
+        stop_list = self.stop_time_map.get(trip_id, None)
+        result = []
+
+        if stop_list is None:
+            return None
+
+        for i in range(len(stop_list)):
+            if stop_list[i]['arrival_time'] >= time_offset:
+                return i
+
+        return None
+
+    def get_trip_id(self, lat, lon, seconds, trip_id_from_block = None):
         segment_list = self.grid.get_segment_list(lat, lon)
 
         if segment_list is None:
@@ -651,9 +719,15 @@ class TripInference:
         #    multiplier = 10
 
         max_segment_score = 0
+        time_offset = 0
 
         for segment in segment_list:
-            score = multiplier * segment.get_score(lat, lon, seconds, self.path)
+            if trip_id_from_block is not None and segment.trip_id != trip_id_from_block:
+                continue
+
+            result = multiplier * segment.get_score(lat, lon, seconds, self.path)
+            score = result['score']
+            time_offset = result['time_offset']
 
             if score <= 0:
                 continue
@@ -670,12 +744,14 @@ class TripInference:
                 self.trip_candidates[trip_id] = candidate
 
             candidate['score'] += score
+            candidate['time_offset'] = time_offset
 
         if max_segment_score > 0 and stop_id is not None:
             self.check_for_trip_start(stop_id)
 
         max_score = 0
         max_trip_id = None
+        cand_time_offset = None
 
         for trip_id in self.trip_candidates:
             cand = self.trip_candidates[trip_id]
@@ -686,10 +762,14 @@ class TripInference:
             if score > max_score:
                 max_score = score
                 max_trip_id = trip_id
+                cand_time_offset = cand['time_offset']
 
         util.debug(f'- max_score: {max_score}')
 
         if max_score >= SCORE_THRESHOLD:
-            return max_trip_id
+            return {
+                'trip_id': max_trip_id,
+                'stop-time-entities': self.get_stop_time_entities(max_trip_id, cand_time_offset)
+            }
         else:
             return None

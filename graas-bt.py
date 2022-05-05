@@ -26,29 +26,10 @@ from led import set_led_pattern, start_led
 from acc import start_acc, acc_snapshot
 
 APP_VERSION = 'graas 0.1 (gulper)'
-MAX_POINTS = 2500
 INVALID_GPS = 9999
 startseconds = int(util.get_current_time_millis() / 1000)
 hostname = None
-lock = threading.Lock()
-screenWidth = -1
-screenHeight = -1
-mapArea = Area()
-points = []
-missed_points =[]
-current_points = points
 config = None
-#client_sock = None
-
-lastLat = 0
-lastLong = 0
-lastResponse = ''
-hasUpdate = False
-
-debuggingActive = False
-ENABLE_DEBUGGING='ENABLE DEBUGGING'
-DISABLE_DEBUGGING='DISABLE DEBUGGING'
-KILL='KILL'
 
 def initialize_gpio():
     GPIO.setmode(GPIO.BCM)
@@ -96,14 +77,15 @@ def send_gps_data(gps, trip_id, sk):
     #util.debug(f'- obj: {json.dumps(obj)}')
 
     data = json.dumps(obj, separators=(',', ':')).encode('utf-8')
-    req = request.Request('https://lat-long-prototype.wl.r.appspot.com/new-pos-sig', data=data)
-    req.add_header('Content-Type', 'application/json')
+    url = 'https://lat-long-prototype.wl.r.appspot.com/new-pos-sig'
+    headers = {'Content-Type': 'application/json'}
+    resp = None
 
     try:
-        util.debug(f'+ urlopen() >')
-        resp = request.urlopen(req, timeout=5)
-        resp_code = resp.code
-        util.debug(f'+ urlopen() <')
+        util.debug(f'+ requests.post() >')
+        resp = requests.post(url, headers = headers, timeout = 5)
+        resp_code = resp.status_code
+        util.debug(f'+ requests.post() <')
         #util.debug(f'- resp_code: {resp_code}')
     except:
         resp_code = 999
@@ -114,30 +96,10 @@ def send_gps_data(gps, trip_id, sk):
         server_response = util.bcolors.OKGREEN + 'ok' + util.bcolors.STANDARD
     util.debug(f'- server_response: {server_response}')
 
-    lock.acquire()
-    global lastLat, lastLong, lastResponse, hasUpdate
-    lastLat = gps['lat']
-    lastLong = gps['lon']
-    lastResponse = 'ok' if resp_code == 200 else str(resp_code)
-
-    p = ShapePoint(lastLat, lastLong)
-
-    if resp_code == 200:
-        points.append(p)
-        if len(points) >= MAX_POINTS:
-            points.pop(0)
-        current_points = points
+    if resp is None:
+        return None
     else:
-        missed_points.append(p)
-        if len(missed_points) >= MAX_POINTS:
-            missed_points.pop(0)
-        current_points = missed_points
-
-    mapArea.update_from_shapepoint(p)
-
-    hasUpdate = True
-    lock.release()
-
+        return resp.json()
 
 def send_at(ser, command, back, timeout):
     rec_buff = ''
@@ -246,138 +208,6 @@ def read_gps_data(ser):
 
     return gps
 
-def handleButton(text):
-    util.debug(f'handleButton() {text}')
-    global debuggingActive
-
-    if text == ENABLE_DEBUGGING:
-        util.debug(f'"{ENABLE_DEBUGGING}" button pressed')
-        os.system('/home/pi/bin/ngrok tcp 22 &')
-        debuggingActive = True
-
-    if text == DISABLE_DEBUGGING:
-        util.debug(f'"{DISABLE_DEBUGGING}" button pressed')
-        os.system('killall ngrok &')
-        debuggingActive = False
-
-    if text == KILL:
-        util.debug('KILL button pressed')
-        canvas.terminate()
-
-def handleCommand(args):
-    #util.debug(f'handleCommand()')
-    #util.debug(f'- args: {args}')
-
-    if args[0] == 'hello':
-        global screenWidth, screenHeight
-        screenWidth = int(args[1])
-        screenHeight = int(args[2])
-
-        xoff = int(screenWidth / 20)
-        ww = screenWidth - 2 * xoff
-
-        start_acc(ww, 0.1)
-        util.debug(f'started acc')
-
-        canvas.getTextDimensions(ENABLE_DEBUGGING)
-        canvas.getTextDimensions(DISABLE_DEBUGGING)
-        canvas.getTextDimensions(KILL)
-        canvas.blit()
-
-    if args[0] == 'nop' and rcanvas.is_initialized():
-        time.sleep(1) ### REVERT
-
-        canvas.setColor(util.DARK);
-        canvas.drawRect(0, 0, screenWidth, screenHeight, True)
-
-        lock.acquire()
-
-        offset = int(screenWidth * .1)
-        l = screenWidth - 2 * offset
-
-        canvas.setColor(util.MAP_POINT);
-
-        for p in points:
-            x, y = util.lat_long_to_x_y(l, l, mapArea, p)
-            canvas.drawCircle(offset + x, offset + y, 8, True)
-
-        canvas.setColor(util.MAP_POINT_MISSED);
-
-        for p in missed_points:
-            x, y = util.lat_long_to_x_y(l, l, mapArea, p)
-            canvas.drawCircle(offset + x, offset + y, 8, True)
-
-        if len(current_points) > 0:
-            p = current_points[-1]
-            x, y = util.lat_long_to_x_y(l, l, mapArea, p)
-            canvas.setColor(util.LIGHT);
-            canvas.drawCircle(offset + x, offset + y, 30, False)
-
-        lock.release()
-
-        xoff = int(screenWidth / 20)
-        xl = xoff
-        xr = int(screenWidth / 4) + xoff
-        ww = screenWidth - 2 * xoff
-        ww2 = int(ww / 2)
-        y = screenHeight - screenWidth
-        ystep = int(y / 11)
-        yoff = int(ystep / 10)
-        hh = ystep - 2 * yoff
-
-        hms = datetime.fromtimestamp(int(time.time())).strftime("%-I:%M:%S %p")
-
-        canvas.setColor('ffff00ff');
-        canvas.drawRect(0, y, screenWidth, 1, True)
-        canvas.drawLabel(f'"{hostname}" @ {hms}', xl, y + rcanvas.center_text_vertically(ystep))
-        y += ystep
-
-        canvas.setColor(util.LIGHT);
-        canvas.drawRect(xl, y + yoff, ww, hh, False)
-        acc_buf = acc_snapshot()
-        yscale = 3
-        ptsize = 2
-        canvas.setColor('a0ff6060');
-        for i in range(len(acc_buf)):
-            canvas.drawCircle(xoff + i, int(y + yoff + hh * .5 + acc_buf[i][0] * yscale), 2, True)
-        canvas.setColor('a060ff60');
-        for i in range(len(acc_buf)):
-            canvas.drawCircle(xoff + i, int(y + yoff + hh * .5 + acc_buf[i][1] * yscale), 2, True)
-        canvas.setColor('a06060ff');
-        for i in range(len(acc_buf)):
-            canvas.drawCircle(xoff + i, int(y + yoff + hh * .5 + acc_buf[i][2] * yscale), 2, True)
-        y += ystep
-
-        str = util.get_display_distance(mapArea.get_width_in_feet())
-        canvas.drawLabel('Scale:', xl, y + rcanvas.center_text_vertically(ystep))
-        canvas.drawTextField(str, xr, y + yoff, screenWidth - xoff - xr, hh)
-        y += ystep
-
-        lock.acquire()
-
-        canvas.drawLabel('Lat:', xl, y + rcanvas.center_text_vertically(ystep))
-        canvas.drawTextField(lastLat, xr, y + yoff, screenWidth - xoff - xr, hh)
-        y += ystep
-
-        canvas.drawLabel('Long:', xl, y + rcanvas.center_text_vertically(ystep))
-        canvas.drawTextField(lastLong, xr, y + yoff, screenWidth - xoff - xr, hh)
-        y += ystep
-
-        color = 'ff00ff00' if lastResponse == 'ok' else 'ffff0000'
-        canvas.drawLabel('Response:', xl, y + rcanvas.center_text_vertically(ystep))
-        canvas.drawTextField(lastResponse, xr, y + yoff, screenWidth - xoff - xr, hh, color)
-        y += ystep
-
-        lock.release()
-
-        text = DISABLE_DEBUGGING if debuggingActive else ENABLE_DEBUGGING
-        canvas.drawButton(text, util.DARK, xl, y + yoff, ww, hh)
-        y += ystep
-
-        canvas.drawButton(KILL, util.DANGER, xl, y + yoff, ww, hh)
-        y += ystep
-
-        canvas.blit()
 
 def excepthook(exctype, value, tb):
     util.debug('*** excepthook:')
@@ -414,9 +244,6 @@ def main(config_file, network_gps):
     time.sleep(1)
     os.system('sudo hciconfig hci0 piscan')
 
-    global canvas
-    canvas = RCanvas(rcanvas.COMM_BT, handleCommand, handleButton)
-
     util.debug('waiting for network...')
 
     network_sleep = os.getenv('NETWORK_SLEEP')
@@ -433,13 +260,12 @@ def main(config_file, network_gps):
         pass
 
     set_led_pattern([0.3, 0.3, 0.3, 0.3, 0.3, 1.5])
-    req = request.Request('http://www.google.com')
     while True:
         code = 0
         try:
             util.debug(f'checking connectivity...')
-            resp = request.urlopen(req, timeout=5)
-            code = resp.code
+            resp = requests.get('http://www.google.com', timeout=5)
+            code = resp.status_code
         except:
             code = 999
             util.debug(f'* network exception')
@@ -479,6 +305,7 @@ def main(config_file, network_gps):
 
     #util.debug(f'- pem:\n{pem}')
     sk = ecdsa.SigningKey.from_pem('-----BEGIN PRIVATE KEY-----\n' + config.get_property('agency_key') + '\n-----END PRIVATE KEY-----\n')
+    assigned_trip_id = None
 
     while True:
         try:
@@ -506,10 +333,11 @@ def main(config_file, network_gps):
                 grid_index = inf.grid.get_index(lat, lon)
                 util.debug(f'({data["lat"]}, {data["lon"]})')
                 util.debug(f'current location: lat={lat} long={lon} seconds={seconds} grid_index={grid_index}')
-                trip_id = str(inf.get_trip_id(lat, lon, seconds))
+                trip_id = str(inf.get_trip_id(lat, lon, seconds, assigned_trip_id))
                 util.debug(f'- trip_id: {trip_id}')
 
-            send_gps_data(data, trip_id, sk)
+            r = send_gps_data(data, trip_id, sk)
+            assigned_trip_id = r.get('assigned_trip_id', None)
         except KeyboardInterrupt:
             send_at(ser, 'AT+CGPS=0','OK',1)
             if ser != None:
