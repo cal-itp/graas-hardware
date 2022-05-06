@@ -283,7 +283,13 @@ def main(config_file, network_gps):
     util.debug('enabling GPS...')
     send_at(ser, 'AT+CGPS=1,1','OK',1)
 
-    inf = TripInference("/home/pi/tmp/gtfs-cache/", config.get_property('static_gtfs_url'), 15)
+    inf = TripInference(
+        '/home/pi/tmp/gtfs-cache/',
+        config.get_property('static_gtfs_url'),
+        config.get_property('agency_name'),
+        config.get_property('vehicle_id'),
+        15
+    )
 
     set_led_pattern([0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.9])
 

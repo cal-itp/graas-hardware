@@ -10,6 +10,15 @@ import re
 from datetime import datetime
 from tee import Tee
 
+def get_agency_id_from_path(path):
+    ir = path.rfind('-', 0, len(path))
+    if ir < 0:
+        return None
+    il = path.rfind('-', 0, ir)
+    if il < 0:
+        return None
+    return path[il + 1:ir]
+
 def main(data_files, cache_folder, output_folder, static_gtfs_url, simulate_block_assignment):
     util.debug(f'main()')
     util.debug(f'- data_files: {data_files}')
@@ -49,10 +58,20 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url, simulate_bloc
         epoch_seconds = util.get_epoch_seconds(m2.group(1))
 
         if dow != last_dow:
-            sfn = tee.filename
             tee.redirect()
-            inf = inference.TripInference(cache_folder, static_gtfs_url, 15, dow, epoch_seconds)
-            #tee.redirect(sfn)
+
+            agency_id = get_agency_id_from_path(df)
+            print(f'++ inferred agency ID: {agency_id}')
+
+            inf = inference.TripInference(
+                cache_folder,
+                static_gtfs_url,
+                agency_id,
+                'test-vehicle-id',
+                15,
+                dow,
+                epoch_seconds
+            )
 
         last_dow = dow
         inf.reset_scoring()
@@ -74,7 +93,15 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url, simulate_bloc
                 grid_index = inf.grid.get_index(lat, lon)
                 util.debug(f'current location: lat={lat} long={lon} seconds={day_seconds} grid_index={grid_index}')
 
-                trip_id = inf.get_trip_id(lat, lon, day_seconds, expected_trip_id)
+                ### uncomment me: trip_id = inf.get_trip_id(lat, lon, day_seconds, expected_trip_id)
+                result = inf.get_trip_id(lat, lon, day_seconds)
+                print(f'- result: {result}')
+
+                trip_id = None
+
+                if result is not None:
+                    trip_id = result.get('trip_id', None)
+
                 print(f'- trip_id: {trip_id}')
 
 # assumes that filename contains a string of format yyyy-mm-dd
@@ -95,7 +122,7 @@ if __name__ == '__main__':
     cache_folder = None
     static_gtfs_url = None
     output_folder = os.getenv('HOME') + '/tmp'
-    simulate_block_assignment = false
+    simulate_block_assignment = False
     i = 0
 
     while True:

@@ -9,7 +9,7 @@ def main(args):
     #area = Area(ShapePoint(34.902, -120.45993), ShapePoint(34.41789, -119.6852))
 
     start = util.get_current_time_millis()
-    inf = inference.TripInference(args[0], args[1], 15)
+    inf = inference.TripInference(args[0], args[1], 'test-agency-id', 'test-vehicle-id', 15)
     print(f'- inference.TripInference.VERSION: {inference.TripInference.VERSION}')
     elapsed = util.get_current_time_millis() - start
 
