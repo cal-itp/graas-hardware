@@ -795,7 +795,7 @@ class TripInference:
         if max_score >= SCORE_THRESHOLD:
             return {
                 'trip_id': max_trip_id,
-                'stop-time-entities': self.get_stop_time_entities(max_trip_id, seconds, cand_time_offset)
+                'stop_time_entities': self.get_stop_time_entities(max_trip_id, seconds, cand_time_offset)
             }
         else:
             return None

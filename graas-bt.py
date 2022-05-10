@@ -48,8 +48,6 @@ def get_agent_string():
 #    return deg + util.sign(deg) * (min / 60) + util.sign(deg) * (sec / 3600)
 
 def send_gps_data(gps, trip_id, sk):
-    #util.debug('send_gps_data()')
-    #util.debug(f'- gps: {gps}')
     msg = {
         'uuid': config.get_property('uuid'),
         'agent': get_agent_string(),
@@ -65,8 +63,22 @@ def send_gps_data(gps, trip_id, sk):
         'pos-timestamp': gps['timestamp']
     }
 
-    data = json.dumps(msg, separators=(',', ':'))
+    return send_data(msg, sk, 'new-pos-sig')
+
+def send_stop_time_entities(entities, sk):
+    msg = {
+        'agency-id': config.get_property('agency_name'),
+        'stop_time_entities': entities
+    }
+
+    return send_data(msg, sk, 'new-stop-entities')
+
+def send_data(msg, sk, endpoint):
+    #util.debug('send_data()')
     #util.debug(f'- data: {data}')
+    #util.debug(f'- data: {data}')
+
+    data = json.dumps(msg, separators=(',', ':'))
     sig = util.sign(data, sk)
 
     obj = {
@@ -77,13 +89,13 @@ def send_gps_data(gps, trip_id, sk):
     #util.debug(f'- obj: {json.dumps(obj)}')
 
     data = json.dumps(obj, separators=(',', ':')).encode('utf-8')
-    url = 'https://lat-long-prototype.wl.r.appspot.com/new-pos-sig'
+    url = 'https://lat-long-prototype.wl.r.appspot.com/' + endpoint
     headers = {'Content-Type': 'application/json'}
     resp = None
 
     try:
         util.debug(f'+ requests.post() >')
-        resp = requests.post(url, headers = headers, timeout = 5)
+        resp = requests.post(url, data = data, headers = headers, timeout = 5)
         resp_code = resp.status_code
         util.debug(f'+ requests.post() <')
         #util.debug(f'- resp_code: {resp_code}')
@@ -339,8 +351,16 @@ def main(config_file, network_gps):
                 grid_index = inf.grid.get_index(lat, lon)
                 util.debug(f'({data["lat"]}, {data["lon"]})')
                 util.debug(f'current location: lat={lat} long={lon} seconds={seconds} grid_index={grid_index}')
-                trip_id = str(inf.get_trip_id(lat, lon, seconds, assigned_trip_id))
+                result = str(inf.get_trip_id(lat, lon, seconds, assigned_trip_id))
+
+                trip_id = result.get('trip_id', None)
                 util.debug(f'- trip_id: {trip_id}')
+
+                stop_time_entities = result.get('stop_time_entities', None)
+                util.debug(f'- stop_time_entities: {stop_time_entities}')
+
+                if stop_time_entities is not None and len(stop_time_entities) > 0:
+                    send_stop_time_entities(stop_time_entities, sk)
 
             r = send_gps_data(data, trip_id, sk)
             assigned_trip_id = r.get('assigned_trip_id', None)
