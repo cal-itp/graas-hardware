@@ -731,6 +731,7 @@ class TripInference:
             return None
 
         util.debug(f'- len(segment_list): {len(segment_list)}')
+        #util.debug(f'- trip_id_from_block: {trip_id_from_block}')
 
         stop_id = self.get_stop_for_position(lat, lon, STOP_PROXIMITY)
 

@@ -227,15 +227,12 @@ def get_property(filename, name):
     key = name + ': '
 
     with platform.get_text_file_contents(filename) as f:
-        while True:
-            line = f.readline()
-            if line is None:
-                break
-
+        lines = f.readlines()
+        for line in lines:
             line = line.strip()
             i = line.find(key)
             if i == 0:
-                return line[len(key)]
+                return line[len(key):]
 
     return None
 

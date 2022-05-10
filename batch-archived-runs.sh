@@ -24,7 +24,7 @@ DATA_FILES=`find $DATA_DIR -name updates.txt -print | sort`
 echo DATA_FILES: $DATA_FILES
 
 rm -f $OUTPUT_DIR/202*-log.txt
-time python3 run-archived-trip.py -c $CACHE_DIR -u $GTFS_URL $DATA_FILES > $OUTPUT_DIR/log.txt
+time python3 run-archived-trip.py -c $CACHE_DIR -u $GTFS_URL $DATA_FILES -b > $OUTPUT_DIR/log.txt
 
 echo RESULT_FILE: $RESULT_FILE
 cat /dev/null > $RESULT_FILE

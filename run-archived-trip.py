@@ -45,7 +45,7 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url, simulate_bloc
             i = df.rfind('/')
 
             if i > 0:
-                metaf = df[0, i + 1] + 'metadata.txt'
+                metaf = df[0:i + 1] + 'metadata.txt'
                 print(f'- metaf: {metaf}')
                 expected_trip_id = util.get_property(metaf, 'trip-id')
                 print(f'- expected_trip_id: >{expected_trip_id}<')
@@ -93,8 +93,7 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url, simulate_bloc
                 grid_index = inf.grid.get_index(lat, lon)
                 util.debug(f'current location: lat={lat} long={lon} seconds={day_seconds} grid_index={grid_index}')
 
-                ### uncomment me: trip_id = inf.get_trip_id(lat, lon, day_seconds, expected_trip_id)
-                result = inf.get_trip_id(lat, lon, day_seconds)
+                result = inf.get_trip_id(lat, lon, day_seconds, expected_trip_id)
                 print(f'- result: {result}')
 
                 trip_id = None
