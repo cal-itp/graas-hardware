@@ -703,7 +703,7 @@ class TripInference:
             entities.append(e)
 
         util.debug(f'- entities: {entities}')
-        return json.dumps(entities, separators=(',', ':'))
+        return entities
 
     # assumes that stop_list entries are sorted by 'arrival_time'
     def get_remaining_stops_index(self, trip_id, time_offset):
@@ -722,7 +722,7 @@ class TripInference:
             if stop_list[i]['arrival_time'] >= time_offset:
                 return i
 
-        return None
+        return len(stop_list)
 
     def get_trip_id(self, lat, lon, seconds, trip_id_from_block = None):
         segment_list = self.grid.get_segment_list(lat, lon)
@@ -793,7 +793,7 @@ class TripInference:
         if max_score >= SCORE_THRESHOLD:
             return {
                 'trip_id': max_trip_id,
-                'stop-time-entities': self.get_stop_time_entities(max_trip_id, cand_time_offset)
+                'stop-time-entities': self.get_stop_time_entities(max_trip_id, seconds)
             }
         else:
             return None
