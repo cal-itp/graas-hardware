@@ -675,12 +675,13 @@ class TripInference:
                     return b
         return None
 
-    def get_stop_time_entities(self, trip_id, time_offset):
+    def get_stop_time_entities(self, trip_id, day_seconds, offset):
         util.debug(f'get_stop_time_entities()')
         util.debug(f'- trip_id: {trip_id}')
-        util.debug(f'- time_offset: {time_offset}')
+        util.debug(f'- day_seconds: {day_seconds}')
+        util.debug(f'- offset: {offset}')
 
-        index = self.get_remaining_stops_index(trip_id, time_offset)
+        index = self.get_remaining_stops_index(trip_id, day_seconds + offset)
         util.debug(f'- index: {index}')
         stop_list = self.stop_time_map.get(trip_id, [])
         util.debug(f'- stop_list: {stop_list}')
@@ -695,7 +696,7 @@ class TripInference:
                 'agency_id': self.agency_id,
                 'trip_id': trip_id,
                 'stop_sequence': s['stop_sequence'],
-                'delay': time_offset,
+                'delay': offset,
                 'vehicle_id': self.vehicle_id,
                 'timestamp': timestamp
             }
@@ -706,10 +707,10 @@ class TripInference:
         return entities
 
     # assumes that stop_list entries are sorted by 'arrival_time'
-    def get_remaining_stops_index(self, trip_id, time_offset):
+    def get_remaining_stops_index(self, trip_id, day_seconds):
         util.debug(f'get_remaining_stops_index()')
         util.debug(f'- trip_id: {trip_id}')
-        util.debug(f'- time_offset: {time_offset}')
+        util.debug(f'- day_seconds: {day_seconds}')
 
         stop_list = self.stop_time_map.get(trip_id, None)
         util.debug(f'- stop_list: {stop_list}')
@@ -719,7 +720,7 @@ class TripInference:
             return None
 
         for i in range(len(stop_list)):
-            if stop_list[i]['arrival_time'] >= time_offset:
+            if stop_list[i]['arrival_time'] >= day_seconds:
                 return i
 
         return len(stop_list)
@@ -794,7 +795,7 @@ class TripInference:
         if max_score >= SCORE_THRESHOLD:
             return {
                 'trip_id': max_trip_id,
-                'stop-time-entities': self.get_stop_time_entities(max_trip_id, seconds)
+                'stop-time-entities': self.get_stop_time_entities(max_trip_id, seconds, cand_time_offset)
             }
         else:
             return None
