@@ -363,7 +363,7 @@ def main(config_file, network_gps):
                     send_stop_time_entities(stop_time_entities, sk)
 
             r = send_gps_data(data, trip_id, sk)
-            assigned_trip_id = r.get('assigned_trip_id', None)
+            assigned_trip_id = r.get('backfilled_trip_id', None)
         except KeyboardInterrupt:
             send_at(ser, 'AT+CGPS=0','OK',1)
             if ser != None:
