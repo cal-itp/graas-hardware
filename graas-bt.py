@@ -67,7 +67,7 @@ def send_gps_data(gps, trip_id, sk):
 
 def send_stop_time_entities(entities, sk):
     msg = {
-        'agency-id': config.get_property('agency_name'),
+        'agency_id': config.get_property('agency_name'),
         'stop_time_entities': entities
     }
 
