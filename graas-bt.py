@@ -47,7 +47,7 @@ def get_agent_string():
 #def dms_to_decimals(deg, min, sec):
 #    return deg + util.sign(deg) * (min / 60) + util.sign(deg) * (sec / 3600)
 
-def send_gps_data(gps, trip_id, sk):
+def send_gps_data(url, gps, trip_id, sk):
     msg = {
         'uuid': config.get_property('uuid'),
         'agent': get_agent_string(),
@@ -63,19 +63,18 @@ def send_gps_data(gps, trip_id, sk):
         'pos-timestamp': gps['timestamp']
     }
 
-    return send_data(msg, sk, 'new-pos-sig')
+    return send_data(url, msg, sk, 'new-pos-sig')
 
-def send_stop_time_entities(entities, sk):
+def send_stop_time_entities(url, entities, sk):
     msg = {
         'agency_id': config.get_property('agency_name'),
         'stop_time_entities': entities
     }
 
-    return send_data(msg, sk, 'new-stop-entities')
+    return send_data(url, msg, sk, 'new-stop-entities')
 
-def send_data(msg, sk, endpoint):
+def send_data(url, msg, sk, endpoint):
     #util.debug('send_data()')
-    #util.debug(f'- data: {data}')
     #util.debug(f'- data: {data}')
 
     data = json.dumps(msg, separators=(',', ':'))
@@ -89,17 +88,17 @@ def send_data(msg, sk, endpoint):
     #util.debug(f'- obj: {json.dumps(obj)}')
 
     data = json.dumps(obj, separators=(',', ':')).encode('utf-8')
-    url = 'https://lat-long-prototype.wl.r.appspot.com/' + endpoint
     headers = {'Content-Type': 'application/json'}
     resp = None
 
     try:
-        util.debug(f'+ requests.post() >')
-        resp = requests.post(url, data = data, headers = headers, timeout = 5)
+        #util.debug(f'+ requests.post() >')
+        resp = requests.post(url + endpoint, data = data, headers = headers, timeout = 5)
         resp_code = resp.status_code
-        util.debug(f'+ requests.post() <')
-        #util.debug(f'- resp_code: {resp_code}')
+        #util.debug(f'+ requests.post() <')
+        util.debug(f'- resp: {resp.json()}')
     except:
+        traceback.print_exc()
         resp_code = 999
         util.debug(util.bcolors.FAIL + '* network exception' + util.bcolors.STANDARD)
 
@@ -129,7 +128,7 @@ def send_at(ser, command, back, timeout):
             return rec_buff.decode()
     else:
         util.debug('GPS is not ready')
-        return 0
+        return None
 
 def read_gps_data_from_network():
     #util.debug('read_gps_data_from_network()')
@@ -178,7 +177,10 @@ def read_gps_data_from_network():
 # 3832.682076,N,12142.488254,W,280521,203223.0,6.2,0.0,303.7
 def read_gps_data(ser):
     answer = send_at(ser, 'AT+CGPSINFO','+CGPSINFO: ',1)
-    lines = answer.splitlines()
+    if answer is None:
+        lines = []
+    else:
+        lines = answer.splitlines()
     #util.debug(f'- lines: {lines}')
     #util.debug(f'- len(lines): {len(lines)}')
     #util.debug(f'- lines[2]: {lines[2]}')
@@ -229,7 +231,12 @@ def excepthook(exctype, value, tb):
     tb.print_exc(file=sys.stdout)
     set_led_pattern([0.25, 0.25])
 
-def main(config_file, network_gps):
+def main(server_url, config_file, network_gps):
+    print(f'main()')
+    print(f'- server_url: {server_url}')
+    print(f'- config_file: {config_file}')
+    print(f'- network_gps: {network_gps}')
+
     #sys.excepthook = excepthook
 
     socket.setdefaulttimeout(10)
@@ -351,7 +358,7 @@ def main(config_file, network_gps):
                 grid_index = inf.grid.get_index(lat, lon)
                 util.debug(f'({data["lat"]}, {data["lon"]})')
                 util.debug(f'current location: lat={lat} long={lon} seconds={seconds} grid_index={grid_index}')
-                result = str(inf.get_trip_id(lat, lon, seconds, assigned_trip_id))
+                result = inf.get_trip_id(lat, lon, seconds, assigned_trip_id)
 
                 trip_id = result.get('trip_id', None)
                 util.debug(f'- trip_id: {trip_id}')
@@ -360,10 +367,11 @@ def main(config_file, network_gps):
                 util.debug(f'- stop_time_entities: {stop_time_entities}')
 
                 if stop_time_entities is not None and len(stop_time_entities) > 0:
-                    send_stop_time_entities(stop_time_entities, sk)
+                    send_stop_time_entities(server_url, stop_time_entities, sk)
 
-            r = send_gps_data(data, trip_id, sk)
+            r = send_gps_data(server_url, data, trip_id, sk)
             assigned_trip_id = r.get('backfilled_trip_id', None)
+            util.debug(f'- assigned_trip_id: {assigned_trip_id}')
         except KeyboardInterrupt:
             send_at(ser, 'AT+CGPS=0','OK',1)
             if ser != None:
@@ -376,8 +384,10 @@ def main(config_file, network_gps):
 
 if __name__ == '__main__':
     # -c <config file>: config file location
+    # -u <url>: server URL, defaults to graas prod
     # -n: acquire lat/long over network
     config_file = None
+    server_url = 'https://lat-long-prototype.wl.r.appspot.com/'
     network_gps = False
 
     for i in range(1, len(sys.argv)):
@@ -388,11 +398,18 @@ if __name__ == '__main__':
             i += 1
             config_file = sys.argv[i]
 
+        if sys.argv[i] == '-u' and i < len(sys.argv) - 1:
+            i += 1
+            server_url = sys.argv[i]
+            if server_url.rfind('/') != len(server_url) - 1:
+                server_url += '/'
+
     if config_file is None:
-        util.debug(f'* usage: {sys.argv[0]} [-n] -c <config_file>')
+        util.debug(f'* usage: {sys.argv[0]} [-n] [-u <server-url] -c <config_file>')
         util.debug(f'    -n: acquire lat/long over network (currently hardwired to 192.168.50.1')
         util.debug(f'    -c <config_file>: give path to config file')
+        util.debug(f'    -u <url>: server URL, defaults to graas prod')
 
         exit(1)
 
-    main(config_file, network_gps)
+    main(server_url, config_file, network_gps)
