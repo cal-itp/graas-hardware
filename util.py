@@ -223,6 +223,20 @@ def sign(str, sk):
         debug(f'*** signature failure: {sys.exc_info()[0]}')
         return None
 
+def get_property(filename, name):
+    key = name + ': '
+
+    with platform.get_text_file_contents(filename) as f:
+        lines = f.readlines()
+        for line in lines:
+            line = line.strip()
+            i = line.find(key)
+            if i == 0:
+                return line[len(key):]
+
+    return None
+
+
 def update_cache_if_needed(cache_path, url):
     debug(f'update_cache_if_needed()')
     debug(f'- cache_path: {cache_path}')

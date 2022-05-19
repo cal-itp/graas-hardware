@@ -1,7 +1,9 @@
 import copy
 import csv
 import datetime
+import json
 import math
+import os
 import time
 import util
 import platform
@@ -19,7 +21,7 @@ STOP_CAP = 10
 class TripInference:
     VERSION = '0.2 (12/07/21)'
 
-    def __init__(self, path, url, subdivisions, dow = -1, epoch_seconds = -1):
+    def __init__(self, path, url, agency_id, vehicle_id, subdivisions, dow = -1, epoch_seconds = -1):
         if path[-1] != '/':
             path += '/'
 
@@ -27,13 +29,15 @@ class TripInference:
 
         self.trip_candidates = {}
         self.last_candidate_flush = time.time()
+        self.agency_id = agency_id
+        self.vehicle_id = vehicle_id
 
         self.path = path
         calendar_map = self.get_calendar_map()
-        util.debug(f'- calendar_map: {calendar_map}')
+        util.debug(f'- calendar_map: {json.dumps(calendar_map, indent = 4)}')
 
         route_map = self.get_route_map()
-        util.debug(f'- route_map: {route_map}')
+        util.debug(f'- route_map: {json.dumps(route_map, indent = 4)}')
 
         self.area = Area()
         self.populateBoundingBox(self.area)
@@ -55,6 +59,9 @@ class TripInference:
         self.preload_shapes()
 
         self.compute_shape_lengths()
+        self.block_map = {}
+
+        trip_set = set()
 
         with platform.get_text_file_contents(path + '/trips.txt') as f:
             reader = csv.DictReader(f)
@@ -68,6 +75,8 @@ class TripInference:
                 trip_id = r['trip_id']
                 service_id = r['service_id']
                 shape_id = r['shape_id']
+
+                trip_set.add(trip_id)
 
                 if not service_id in calendar_map:
                     util.debug(f'* service id \'{service_id}\' not found in calendar map, skipping trip \'{trip_id}\'')
@@ -85,7 +94,7 @@ class TripInference:
                     start_seconds = util.get_epoch_seconds(start_date)
                     end_seconds = util.get_epoch_seconds(end_date)
                     if epoch_seconds < start_seconds or epoch_seconds > end_seconds:
-                        util.debug(f'* trip date outside service period, skipping trip \'{trip_id}\'')
+                        util.debug(f'* trip date outside service period (start: {start_date}, end: {end_date}), skipping trip \'{trip_id}\'')
                         continue
 
                 util.debug(f'')
@@ -107,6 +116,27 @@ class TripInference:
 
                 timer = Timer('stop times')
                 stop_times = self.get_stop_times(trip_id)
+
+                block_id = r.get('block_id', None)
+                #util.debug(f'-- block_id: {block_id}')
+
+                if block_id is not None and len(block_id) > 0 and stop_times is not None and len(stop_times) > 0:
+                    trip_list = self.block_map.get(block_id, None)
+
+                    if trip_list is None:
+                        trip_list = []
+                        self.block_map[block_id] = trip_list
+
+                    start_time = stop_times[0].get('arrival_time', None)
+                    end_time = stop_times[-1].get('arrival_time', None)
+
+                    if start_time is not None and end_time is not None:
+                        trip_list.append({
+                            'trip_id': trip_id,
+                            'start_time': start_time,
+                            'end_time': end_time
+                        })
+
                 #util.debug(timer)
                 #util.debug(f'-- stop_times: {stop_times}')
                 util.debug(f'-- len(stop_times): {len(stop_times)}')
@@ -130,10 +160,15 @@ class TripInference:
                 #util.debug(timer)
                 #util.debug(loop_timer)
 
+        util.debug(f'-- self.block_map: {json.dumps(self.block_map, indent = 4)}')
+
         util.debug(load_timer)
         util.debug(f'-- self.grid: {self.grid}')
 
-        self.stop_time_map = {}
+        for tid in self.stop_time_map:
+            if not tid in trip_set:
+                self.stop_time_map.pop(tid)
+
         self.shape_map = {}
 
     def populateBoundingBox(self, area):
@@ -289,6 +324,7 @@ class TripInference:
                     continue
 
                 stop_id = r['stop_id']
+                stop_sequence = r['stop_sequence']
 
                 slist = self.stop_time_map.get(trip_id, None)
 
@@ -296,7 +332,7 @@ class TripInference:
                     slist = []
                     self.stop_time_map[trip_id] = slist
 
-                entry = {'arrival_time': util.hhmmss_to_seconds(arrival_time), 'stop_id': stop_id}
+                entry = {'arrival_time': util.hhmmss_to_seconds(arrival_time), 'stop_id': stop_id, 'stop_sequence': stop_sequence}
                 sdt = r.get('shape_dist_traveled', None)
 
                 if sdt is not None and len(sdt) > 0:
@@ -629,19 +665,78 @@ class TripInference:
         if 'first_stop' in stop and delta >= MIN_FLUSH_TIME_DELTA:
             self.reset_scoring()
 
-    ###
-    ### FIXME: trip candidate list needs to be flushed when new trip begins
-    ### How can we tell that a new trip begins? current location gets a non-
-    ### zero score, matches lat/long of first stop of a trip, and there hasn't
-    ### been another first stop trip match in a while
-    ###
-    def get_trip_id(self, lat, lon, seconds):
-        segment_list = self.grid.get_segment_list(lat, lon)
+    # returns None for trips filtered out for unmatched day or week,
+    # calendar validity period, etc.
+    def get_block_id_for_trip(self, trip_id):
+        for b in self.block_map:
+            trip_list = self.block_map[b]
+            for t in trip_list:
+                if t['trip_id'] == trip_id:
+                    return b
+        return None
 
-        if segment_list is None:
+    def get_stop_time_entities(self, trip_id, day_seconds, offset):
+        util.debug(f'get_stop_time_entities()')
+        util.debug(f'- trip_id: {trip_id}')
+        util.debug(f'- day_seconds: {day_seconds}')
+        util.debug(f'- offset: {offset}')
+
+        index = self.get_remaining_stops_index(trip_id, day_seconds + offset)
+        util.debug(f'- index: {index}')
+        stop_list = self.stop_time_map.get(trip_id, [])
+        util.debug(f'- stop_list: {stop_list}')
+        entities = []
+        timestamp = int(time.time())
+
+        for i in range(index, len(stop_list)):
+            s = stop_list[i]
+            util.debug(f'-- s: {s}')
+
+            e = {
+                'agency_id': self.agency_id,
+                'trip_id': trip_id,
+                'stop_sequence': s['stop_sequence'],
+                'delay': offset,
+                'vehicle_id': self.vehicle_id,
+                'timestamp': timestamp
+            }
+
+            entities.append(e)
+
+        util.debug(f'- entities: {entities}')
+        return entities
+
+    # assumes that stop_list entries are sorted by 'arrival_time'
+    def get_remaining_stops_index(self, trip_id, day_seconds):
+        util.debug(f'get_remaining_stops_index()')
+        util.debug(f'- trip_id: {trip_id}')
+        util.debug(f'- day_seconds: {day_seconds}')
+
+        stop_list = self.stop_time_map.get(trip_id, None)
+        util.debug(f'- stop_list: {stop_list}')
+        result = []
+
+        if stop_list is None:
             return None
 
+        for i in range(len(stop_list)):
+            if stop_list[i]['arrival_time'] >= day_seconds:
+                return i
+
+        return len(stop_list)
+
+    def get_trip_id(self, lat, lon, seconds, trip_id_from_block = None):
+        segment_list = self.grid.get_segment_list(lat, lon)
+        ret = {
+            'trip_id': None,
+            'stop_time_entities': None
+        }
+
+        if segment_list is None:
+            return ret
+
         util.debug(f'- len(segment_list): {len(segment_list)}')
+        #util.debug(f'- trip_id_from_block: {trip_id_from_block}')
 
         stop_id = self.get_stop_for_position(lat, lon, STOP_PROXIMITY)
 
@@ -651,9 +746,16 @@ class TripInference:
         #    multiplier = 10
 
         max_segment_score = 0
+        time_offset = 0
 
         for segment in segment_list:
-            score = multiplier * segment.get_score(lat, lon, seconds, self.path)
+            if trip_id_from_block is not None and segment.trip_id != trip_id_from_block:
+                continue
+
+            result = segment.get_score(lat, lon, seconds, self.path)
+            score = multiplier * result['score']
+            time_offset = result['time_offset']
+            #util.debug(f'-- time_offset: {time_offset}')
 
             if score <= 0:
                 continue
@@ -670,12 +772,15 @@ class TripInference:
                 self.trip_candidates[trip_id] = candidate
 
             candidate['score'] += score
+            candidate['time_offset'] = time_offset
+            #util.debug(f'-- candidate["time_offset"]: {candidate["time_offset"]}')
 
         if max_segment_score > 0 and stop_id is not None:
             self.check_for_trip_start(stop_id)
 
         max_score = 0
         max_trip_id = None
+        cand_time_offset = None
 
         for trip_id in self.trip_candidates:
             cand = self.trip_candidates[trip_id]
@@ -686,10 +791,12 @@ class TripInference:
             if score > max_score:
                 max_score = score
                 max_trip_id = trip_id
+                cand_time_offset = cand['time_offset']
+                #util.debug(f'-- cand_time_offset: {cand_time_offset}')
 
         util.debug(f'- max_score: {max_score}')
 
         if max_score >= SCORE_THRESHOLD:
-            return max_trip_id
-        else:
-            return None
+            ret['trip_id']: max_trip_id
+            ret['stop_time_entities']: self.get_stop_time_entities(max_trip_id, seconds, cand_time_offset)
+        return ret

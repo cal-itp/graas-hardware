@@ -46,14 +46,14 @@ class Segment:
 
     def get_score(self, lat, lon, seconds, path):
         if not self.bounding_box.contains(lat, lon):
-            return -1
+            return {'score': -1, 'time_offset': 0}
 
         ### REMOVE ME: for testing only
         #if random.random() < .5:
         #    util.debug(f'segment update: id={self.id} trip-name={util.to_b64(self.trip_name)} score={0.0000001}')
 
         if seconds < self.trip_start_seconds or seconds < self.start_time - MAX_TIME_DISTANCE or seconds > self.end_time + MAX_TIME_DISTANCE:
-            return -1
+            return {'score': -1, 'time_offset': 0}
 
         if self.waypoint_list is None:
             self.waypoint_list = []
@@ -103,7 +103,7 @@ class Segment:
         print(f'- min_distance: {min_distance}')
 
         if min_distance > MAX_LOCATION_DISTANCE:
-            return -1
+            return {'score': -1, 'time_offset': 0}
 
         print(f'+ update time : {util.seconds_to_hhmm(seconds)}')
         print(f'+ segment time: {util.seconds_to_hhmm(self.waypoint_list[min_index]["time"])}')
@@ -111,14 +111,18 @@ class Segment:
         print(f'- time_distance: {time_distance}')
 
         if time_distance > MAX_TIME_DISTANCE:
-            return -1
+            return {'score': -1, 'time_offset': 0}
 
         location_score = .5 * (MAX_LOCATION_DISTANCE - min_distance) / MAX_LOCATION_DISTANCE
         time_score = .5 * (MAX_TIME_DISTANCE - time_distance) / MAX_TIME_DISTANCE
 
         util.debug(f'segment update: id={self.id} trip-name={util.to_b64(self.trip_name)} score={location_score + time_score} trip_pos=({self.segment_index}/{self.segments_per_trip}) closest-lat={closestLat} closest-lon={closestLon}')
         util.debug(f'+ trip_name: {self.trip_name}')
-        return location_score + time_score
+
+        return {
+            'score': location_score + time_score,
+            'time_offset': seconds - self.waypoint_list[min_index]['time']
+        }
 
     def get_trip_id(self):
         return self.trip_id

@@ -22,6 +22,9 @@ NAME_KEY = 'i: '
 
 def main(arg):
     with open(arg[0], 'r') as f:
+        lines = f.readlines()
+        lines.append('i: sentinel')
+        index = 0
         correct = 0
         incorrect = 0
         expected_trip_id = None
@@ -29,12 +32,9 @@ def main(arg):
         sum = 0
         items = 0
 
-        while True:
-            line = f.readline()
-            if not line:
-                break
-
-            line = line.strip()
+        while index < len(lines):
+            line = lines[index].strip()
+            index += 1
             #print(f'- line: {line}')
 
             if line.startswith(NAME_KEY):

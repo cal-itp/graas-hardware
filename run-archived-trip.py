@@ -10,7 +10,16 @@ import re
 from datetime import datetime
 from tee import Tee
 
-def main(data_files, cache_folder, output_folder, static_gtfs_url):
+def get_agency_id_from_path(path):
+    ir = path.rfind('-', 0, len(path))
+    if ir < 0:
+        return None
+    il = path.rfind('-', 0, ir)
+    if il < 0:
+        return None
+    return path[il + 1:ir]
+
+def main(data_files, cache_folder, output_folder, static_gtfs_url, simulate_block_assignment):
     util.debug(f'main()')
     util.debug(f'- data_files: {data_files}')
     util.debug(f'- cache_folder: {cache_folder}')
@@ -28,6 +37,19 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url):
     inf = None
 
     for df in data_files:
+        expected_trip_id = None
+        block_id = None
+
+        if simulate_block_assignment:
+            print(f'- df: {df}')
+            i = df.rfind('/')
+
+            if i > 0:
+                metaf = df[0:i + 1] + 'metadata.txt'
+                print(f'- metaf: {metaf}')
+                expected_trip_id = util.get_property(metaf, 'trip-id')
+                print(f'- expected_trip_id: >{expected_trip_id}<')
+
         m1 = re.search(pattern1, df)
         name = m1.group(1)
 
@@ -36,10 +58,20 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url):
         epoch_seconds = util.get_epoch_seconds(m2.group(1))
 
         if dow != last_dow:
-            sfn = tee.filename
             tee.redirect()
-            inf = inference.TripInference(cache_folder, static_gtfs_url, 15, dow, epoch_seconds)
-            #tee.redirect(sfn)
+
+            agency_id = get_agency_id_from_path(df)
+            print(f'++ inferred agency ID: {agency_id}')
+
+            inf = inference.TripInference(
+                cache_folder,
+                static_gtfs_url,
+                agency_id,
+                'test-vehicle-id',
+                15,
+                dow,
+                epoch_seconds
+            )
 
         last_dow = dow
         inf.reset_scoring()
@@ -60,7 +92,15 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url):
                 lon = float(tok[2])
                 grid_index = inf.grid.get_index(lat, lon)
                 util.debug(f'current location: lat={lat} long={lon} seconds={day_seconds} grid_index={grid_index}')
-                trip_id = inf.get_trip_id(lat, lon, day_seconds)
+
+                result = inf.get_trip_id(lat, lon, day_seconds, expected_trip_id)
+                print(f'- result: {result}')
+
+                trip_id = None
+
+                if result is not None:
+                    trip_id = result.get('trip_id', None)
+
                 print(f'- trip_id: {trip_id}')
 
 # assumes that filename contains a string of format yyyy-mm-dd
@@ -81,6 +121,7 @@ if __name__ == '__main__':
     cache_folder = None
     static_gtfs_url = None
     output_folder = os.getenv('HOME') + '/tmp'
+    simulate_block_assignment = False
     i = 0
 
     while True:
@@ -89,6 +130,10 @@ if __name__ == '__main__':
             break
 
         arg = sys.argv[i]
+
+        if arg == '-b' or arg == '--simulate-block-assignment':
+            simulate_block_assignment = True
+            continue
 
         if (arg == '-o' or arg == '--output-folder') and i < len(sys.argv) - 1:
             output_folder = sys.argv[i + 1]
@@ -111,4 +156,4 @@ if __name__ == '__main__':
     if len(data_files) == 0 or cache_folder is None or static_gtfs_url is None:
         usage()
 
-    main(data_files, cache_folder, output_folder, static_gtfs_url)
+    main(data_files, cache_folder, output_folder, static_gtfs_url, simulate_block_assignment)
