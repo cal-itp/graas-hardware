@@ -797,6 +797,6 @@ class TripInference:
         util.debug(f'- max_score: {max_score}')
 
         if max_score >= SCORE_THRESHOLD:
-            ret['trip_id']: max_trip_id
-            ret['stop_time_entities']: self.get_stop_time_entities(max_trip_id, seconds, cand_time_offset)
+            ret['trip_id'] = max_trip_id
+            ret['stop_time_entities'] = self.get_stop_time_entities(max_trip_id, seconds, cand_time_offset)
         return ret
