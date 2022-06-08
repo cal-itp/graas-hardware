@@ -727,9 +727,13 @@ class TripInference:
 
     def get_trip_id(self, lat, lon, seconds, trip_id_from_block = None):
         segment_list = self.grid.get_segment_list(lat, lon)
+        ret = {
+            'trip_id': None,
+            'stop_time_entities': None
+        }
 
         if segment_list is None:
-            return None
+            return ret
 
         util.debug(f'- len(segment_list): {len(segment_list)}')
         #util.debug(f'- trip_id_from_block: {trip_id_from_block}')
@@ -793,9 +797,6 @@ class TripInference:
         util.debug(f'- max_score: {max_score}')
 
         if max_score >= SCORE_THRESHOLD:
-            return {
-                'trip_id': max_trip_id,
-                'stop_time_entities': self.get_stop_time_entities(max_trip_id, seconds, cand_time_offset)
-            }
-        else:
-            return None
+            ret['trip_id']: max_trip_id
+            ret['stop_time_entities']: self.get_stop_time_entities(max_trip_id, seconds, cand_time_offset)
+        return ret
