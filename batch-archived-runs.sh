@@ -22,9 +22,13 @@ STATS_FILE=$OUTPUT_DIR/ti-scores-${TIME_STAMP}.txt
 # sorting is critical to not constantly reload static data
 DATA_FILES=`find $DATA_DIR -name updates.txt -print | sort`
 echo DATA_FILES: $DATA_FILES
+echo STATS_FILE: $STATS_FILE
+
 
 rm -f $OUTPUT_DIR/202*-log.txt
-time python3 run-archived-trip.py -c $CACHE_DIR -u $GTFS_URL $DATA_FILES -b > $OUTPUT_DIR/log.txt
+# run with '-b' to simulate bulk assignment
+# run without '-b' to not simulate bulk mode (aka hard mode)
+time python3 run-archived-trip.py -c $CACHE_DIR -u $GTFS_URL $DATA_FILES > $OUTPUT_DIR/log.txt
 
 echo RESULT_FILE: $RESULT_FILE
 cat /dev/null > $RESULT_FILE
@@ -38,10 +42,11 @@ do
 done
 
 python3 inference-stats.py $RESULT_FILE > $STATS_FILE
-tail -1 $STATS_FILE
+SCORE=`tail -1 $STATS_FILE | awk '{print $2}'`
+echo "score: $SCORE"
 
 if [[ $OSTYPE == "darwin"* ]]
 then
   osascript -e 'say "calculation complete, your move!" using "Zarvox"'
-  osascript -e 'display alert "Batch job complete!"'
+  osascript -e "display alert \"Batch job complete, score: $SCORE\""
 fi
