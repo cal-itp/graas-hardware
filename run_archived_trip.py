@@ -32,6 +32,7 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url, simulate_bloc
     pattern2 =  '.*([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]).*'     # yyyy-mm-dd-hh-mm
 
     tee = Tee()
+    stdout_save = sys.stdout
     sys.stdout = tee
     last_dow = -1
     inf = None
@@ -102,6 +103,9 @@ def main(data_files, cache_folder, output_folder, static_gtfs_url, simulate_bloc
                     trip_id = result.get('trip_id', None)
 
                 print(f'- trip_id: {trip_id}')
+
+    sys.stdout = stdout_save
+
 
 # assumes that filename contains a string of format yyyy-mm-dd
 # returns day of week: 0-6 for Monday through Sunday if date string present, -1 otherwise

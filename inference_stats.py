@@ -20,8 +20,8 @@ EXPECTED_KEY = 'expected: '
 TRIP_ID_KEY = '- trip_id: '
 NAME_KEY = 'i: '
 
-def main(arg):
-    with open(arg[0], 'r') as f:
+def main(filename):
+    with open(filename, 'r') as f:
         lines = f.readlines()
         lines.append('i: sentinel')
         index = 0
@@ -75,4 +75,4 @@ if __name__ == '__main__':
         print(f'usage: {sys.argv[0]} <filename>')
         exit(1)
 
-    main(sys.argv[1:])
+    main(sys.argv[1])
