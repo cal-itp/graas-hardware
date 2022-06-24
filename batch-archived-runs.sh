@@ -28,7 +28,7 @@ echo STATS_FILE: $STATS_FILE
 rm -f $OUTPUT_DIR/202*-log.txt
 # run with '-b' to simulate bulk assignment
 # run without '-b' to not simulate bulk mode (aka hard mode)
-time python3 run-archived-trip.py -c $CACHE_DIR -u $GTFS_URL $DATA_FILES > $OUTPUT_DIR/log.txt
+time python3 run_archived_trip.py -c $CACHE_DIR -u $GTFS_URL $DATA_FILES > $OUTPUT_DIR/log.txt
 
 echo RESULT_FILE: $RESULT_FILE
 cat /dev/null > $RESULT_FILE
@@ -41,7 +41,7 @@ do
   grep "^- trip_id:" $LOG | uniq -c >> $RESULT_FILE
 done
 
-python3 inference-stats.py $RESULT_FILE > $STATS_FILE
+python3 inference_stats.py $RESULT_FILE > $STATS_FILE
 SCORE=`tail -1 $STATS_FILE | awk '{print $2}'`
 echo "score: $SCORE"
 
